@@ -1,0 +1,25 @@
+MISRI CLOTH — Your Public Website Link
+======================================
+
+SHARE THIS LINK ON WHATSAPP / FACEBOOK / INSTAGRAM:
+
+  https://bluetooth-executed-switched-care.trycloudflare.com
+
+Customers can open this on their phone browser.
+Works on Android and iPhone.
+
+Admin panel (orders):
+  https://bluetooth-executed-switched-care.trycloudflare.com/admin/orders.html
+  Password: misri2026
+
+IMPORTANT:
+- Keep your computer ON and run start-public.bat for this link to work.
+- The link changes each time you restart start-public.bat.
+- For a PERMANENT link (24/7, even when PC is off), deploy free on Render.com:
+  1. Create account at https://render.com
+  2. Upload misri-cloth folder to GitHub
+  3. New Web Service → connect repo → Deploy
+  4. You get: https://misri-cloth.onrender.com (permanent!)
+
+To start website again:
+  Double-click: start-public.bat (in misri-cloth folder)

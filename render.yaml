@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: misri-cloth
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production

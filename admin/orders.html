@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Orders — MISRI CLOTH</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Outfit', sans-serif; background: #f5f0e8; color: #1a1210; padding: 24px; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    h1 { margin-bottom: 8px; }
+    .sub { color: #7a7068; margin-bottom: 24px; }
+    .login-box { max-width: 360px; margin: 80px auto; background: white; padding: 32px; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); }
+    input { width: 100%; padding: 12px; margin: 8px 0 16px; border: 1px solid #e5ddd4; border-radius: 6px; font-family: inherit; }
+    button, .btn { background: #1a1210; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+    .error { color: #8b2942; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); margin-bottom: 32px; }
+    th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid #e5ddd4; font-size: 0.88rem; vertical-align: top; }
+    th { background: #1a1210; color: white; }
+    .msg-box { background: white; padding: 18px; border-radius: 10px; margin-bottom: 12px; border: 1px solid #e5ddd4; }
+    .msg-meta { font-size: 0.8rem; color: #7a7068; margin: 4px 0 8px; }
+    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+    h2 { margin: 24px 0 12px; font-size: 1.2rem; }
+    .items-list { font-size: 0.8rem; color: #555; margin-top: 4px; }
+    #app { display: none; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div id="login-view" class="login-box">
+    <h1>MISRI CLOTH Admin</h1>
+    <p class="sub">View orders & customer messages</p>
+    <p class="error" id="login-error" style="display:none"></p>
+    <label>Password</label>
+    <input type="password" id="password" placeholder="Admin password">
+    <button onclick="login()">Login</button>
+  </div>
+
+  <div id="app">
+    <div class="header-row">
+      <div>
+        <h1>Orders & Messages</h1>
+        <p class="sub">All customer purchases saved on this server</p>
+      </div>
+      <button onclick="logout()">Logout</button>
+    </div>
+    <h2>Orders (<span id="order-count">0</span>)</h2>
+    <div id="orders-table"></div>
+    <h2>Contact Messages (<span id="msg-count">0</span>)</h2>
+    <div id="messages-list"></div>
+  </div>
+</div>
+
+<script>
+  let adminPassword = sessionStorage.getItem("misri_admin_pw") || "";
+
+  if (adminPassword) loadData();
+
+  async function login() {
+    adminPassword = document.getElementById("password").value;
+    const ok = await loadData();
+    if (ok) {
+      sessionStorage.setItem("misri_admin_pw", adminPassword);
+      document.getElementById("login-view").style.display = "none";
+      document.getElementById("app").style.display = "block";
+    } else {
+      document.getElementById("login-error").style.display = "block";
+      document.getElementById("login-error").textContent = "Wrong password or server not running";
+    }
+  }
+
+  function logout() {
+    sessionStorage.removeItem("misri_admin_pw");
+    location.reload();
+  }
+
+  async function loadData() {
+    try {
+      const [ordersRes, msgsRes] = await Promise.all([
+        fetch("/api/orders?password=" + encodeURIComponent(adminPassword)),
+        fetch("/api/messages?password=" + encodeURIComponent(adminPassword))
+      ]);
+      if (!ordersRes.ok) return false;
+      const ordersData = await ordersRes.json();
+      const msgsData = await msgsRes.json();
+      renderOrders(ordersData.orders || []);
+      renderMessages(msgsData.messages || []);
+      document.getElementById("login-view").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function renderOrders(orders) {
+    document.getElementById("order-count").textContent = orders.length;
+    if (!orders.length) {
+      document.getElementById("orders-table").innerHTML = "<p>No orders yet.</p>";
+      return;
+    }
+    const rows = orders.map(o => {
+      const items = (o.items || []).map(i =>
+        i.meters ? `${i.product_name} (${i.meters}m)` : `${i.product_name} x${i.quantity}`
+      ).join(", ");
+      const date = new Date(o.created_at).toLocaleString();
+      return `<tr>
+        <td><strong>${o.order_ref}</strong><div class="items-list">${items}</div></td>
+        <td>${o.customer_name}<br><a href="tel:${o.customer_phone}">${o.customer_phone}</a></td>
+        <td>${o.customer_address}</td>
+        <td>Rs. ${Number(o.total_amount).toLocaleString()}</td>
+        <td>${date}</td>
+      </tr>`;
+    }).join("");
+    document.getElementById("orders-table").innerHTML = `
+      <table><thead><tr><th>Order</th><th>Customer</th><th>Address</th><th>Total</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  function renderMessages(msgs) {
+    document.getElementById("msg-count").textContent = msgs.length;
+    if (!msgs.length) {
+      document.getElementById("messages-list").innerHTML = "<p>No messages yet.</p>";
+      return;
+    }
+    document.getElementById("messages-list").innerHTML = msgs.map(m => `
+      <div class="msg-box">
+        <strong>${m.first_name} ${m.last_name}</strong>
+        <div class="msg-meta">${m.email} · ${m.subject} · ${new Date(m.created_at).toLocaleString()}</div>
+        <p>${m.message.replace(/</g,"&lt;")}</p>
+      </div>
+    `).join("");
+  }
+</script>
+</body>
+</html>

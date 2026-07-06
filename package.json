@@ -1,0 +1,13 @@
+{
+  "name": "misri-cloth",
+  "version": "1.0.0",
+  "description": "MISRI CLOTH online shop",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
