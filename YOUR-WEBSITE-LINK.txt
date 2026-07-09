@@ -1,25 +1,26 @@
 MISRI CLOTH — Your Public Website Link
 ======================================
 
-SHARE THIS LINK ON WHATSAPP / FACEBOOK / INSTAGRAM:
+OPTION A — PERMANENT LINK (FREE, NO CARD NEEDED)
+------------------------------------------------
+Double-click:  DEPLOY-TO-VERCEL.bat
+Sign up at Vercel (free, no credit card)
+You get: https://misri-cloth.vercel.app
 
-  https://bluetooth-executed-switched-care.trycloudflare.com
+OPTION B — PERMANENT LINK (needs credit card on Render)
+-------------------------------------------------------
+Double-click:  DEPLOY-TO-RENDER.bat
 
-Customers can open this on their phone browser.
-Works on Android and iPhone.
+OPTION C — TEMPORARY LINK (no signup, PC must stay on)
+------------------------------------------------------
+Double-click:  start-public.bat
 
-Admin panel (orders):
-  https://bluetooth-executed-switched-care.trycloudflare.com/admin/orders.html
-  Password: misri2026
+CURRENT TEMP LINK (if tunnel is running):
+  (run start-public.bat to get a new one)
 
-IMPORTANT:
-- Keep your computer ON and run start-public.bat for this link to work.
-- The link changes each time you restart start-public.bat.
-- For a PERMANENT link (24/7, even when PC is off), deploy free on Render.com:
-  1. Create account at https://render.com
-  2. Upload misri-cloth folder to GitHub
-  3. New Web Service → connect repo → Deploy
-  4. You get: https://misri-cloth.onrender.com (permanent!)
+Admin panel:  YOUR-LINK/admin/orders.html
+Password:     misri2026
 
-To start website again:
-  Double-click: start-public.bat (in misri-cloth folder)
+Store address: OPP Grid Station, Talagang Road, Chakwal
+Phone: 0334-8711716 | 0315-5916343
+Email: sharifimranm@gmail.com
