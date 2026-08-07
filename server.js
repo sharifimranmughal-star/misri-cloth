@@ -2,6 +2,14 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const { Pool } = require("pg");
+const { createAdminApi } = require("./lib/admin-api");
+const {
+  validatePhoneServer,
+  validateEmailServer,
+  calcDeliveryCharge,
+  calcOrderTotal,
+  hasTrackedStock
+} = require("./lib/order-utils");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,8 +17,12 @@ const ROOT = __dirname;
 const DATA_DIR = process.env.VERCEL
   ? path.join("/tmp", "misri-cloth-data")
   : path.join(ROOT, "data");
+const UPLOADS_DIR = path.join(ROOT, "uploads");
 const ORDERS_FILE = path.join(DATA_DIR, "orders.json");
 const MESSAGES_FILE = path.join(DATA_DIR, "messages.json");
+const PRODUCTS_FILE = path.join(DATA_DIR, "products.json");
+const ACTIVITY_FILE = path.join(DATA_DIR, "activity_logs.json");
+const NOTIFICATIONS_FILE = path.join(DATA_DIR, "notifications.json");
 
 const OWNER_EMAIL = "sharifimranm@gmail.com";
 const ADMIN_PASSWORD = "misri2026";
@@ -23,13 +35,18 @@ const dbPool = USE_DB
     })
   : null;
 
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "5mb" }));
 app.use(express.static(ROOT));
+app.use("/uploads", express.static(UPLOADS_DIR));
 
 function ensureDataFiles() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   if (!fs.existsSync(ORDERS_FILE)) fs.writeFileSync(ORDERS_FILE, "[]");
   if (!fs.existsSync(MESSAGES_FILE)) fs.writeFileSync(MESSAGES_FILE, "[]");
+  if (!fs.existsSync(PRODUCTS_FILE)) fs.writeFileSync(PRODUCTS_FILE, "[]");
+  if (!fs.existsSync(ACTIVITY_FILE)) fs.writeFileSync(ACTIVITY_FILE, "[]");
+  if (!fs.existsSync(NOTIFICATIONS_FILE)) fs.writeFileSync(NOTIFICATIONS_FILE, "[]");
 }
 
 function readJson(file) {
@@ -60,6 +77,10 @@ async function initDb() {
       notes TEXT,
       total_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
       status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      payment_method VARCHAR(50) DEFAULT 'COD',
+      payment_status VARCHAR(20) DEFAULT 'pending',
+      subtotal NUMERIC(12,2) DEFAULT 0,
+      delivery_charge NUMERIC(12,2) DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
@@ -102,8 +123,8 @@ async function saveOrder(order) {
 
   const orderInsert = await dbPool.query(
     `INSERT INTO orders
-      (order_ref, customer_name, customer_phone, customer_email, customer_address, notes, total_amount, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      (order_ref, customer_name, customer_phone, customer_email, customer_address, notes, total_amount, subtotal, delivery_charge, status, payment_method, payment_status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      RETURNING id`,
     [
       order.order_ref,
@@ -113,7 +134,11 @@ async function saveOrder(order) {
       order.customer_address,
       order.notes,
       order.total_amount,
-      order.status
+      order.subtotal ?? order.total_amount,
+      order.delivery_charge ?? 0,
+      order.status,
+      order.payment_method || "COD",
+      order.payment_status || "pending"
     ]
   );
   const orderId = orderInsert.rows[0].id;
@@ -136,6 +161,11 @@ async function saveOrder(order) {
       ]
     );
   }
+
+  await dbPool.query(
+    "INSERT INTO order_status_history (order_id, status, admin_name) VALUES ($1,$2,$3)",
+    [orderId, order.status, "System"]
+  );
 }
 
 async function saveContact(entry) {
@@ -158,7 +188,7 @@ async function getOrders() {
 
   const ordersResult = await dbPool.query(
     `SELECT id, order_ref, customer_name, customer_phone, customer_email, customer_address,
-            notes, total_amount, status, created_at
+            notes, total_amount, subtotal, delivery_charge, status, payment_method, payment_status, created_at
      FROM orders
      ORDER BY created_at DESC`
   );
@@ -166,6 +196,10 @@ async function getOrders() {
   const itemsResult = await dbPool.query(
     `SELECT order_id, product_id, product_name, size_label, color, meters, unit_price, quantity, line_total
      FROM order_items`
+  );
+
+  const historyResult = await dbPool.query(
+    `SELECT order_id, status, admin_name, changed_at FROM order_status_history ORDER BY changed_at DESC`
   );
 
   const itemsByOrder = new Map();
@@ -184,6 +218,16 @@ async function getOrders() {
     itemsByOrder.get(row.order_id).push(normalizedItem);
   }
 
+  const historyByOrder = new Map();
+  for (const row of historyResult.rows) {
+    if (!historyByOrder.has(row.order_id)) historyByOrder.set(row.order_id, []);
+    historyByOrder.get(row.order_id).push({
+      status: row.status,
+      adminName: row.admin_name,
+      changedAt: row.changed_at
+    });
+  }
+
   return ordersResult.rows.map((o) => ({
     id: Number(o.id),
     order_ref: o.order_ref,
@@ -193,9 +237,14 @@ async function getOrders() {
     customer_address: o.customer_address,
     notes: o.notes || "",
     total_amount: Number(o.total_amount),
+    subtotal: Number(o.subtotal ?? o.total_amount),
+    delivery_charge: Number(o.delivery_charge ?? 0),
     status: o.status,
+    payment_method: o.payment_method || "COD",
+    payment_status: o.payment_status || "pending",
     created_at: o.created_at,
-    items: itemsByOrder.get(o.id) || []
+    items: itemsByOrder.get(o.id) || [],
+    statusHistory: historyByOrder.get(o.id) || []
   }));
 }
 
@@ -242,57 +291,128 @@ async function notifyOwner(subject, body, customerEmail) {
   }
 }
 
+const adminApi = createAdminApi({
+  ROOT,
+  DATA_DIR,
+  USE_DB,
+  dbPool,
+  ADMIN_PASSWORD,
+  readJson,
+  writeJson,
+  getOrders,
+  getMessages,
+  notifyOwner,
+  ORDERS_FILE,
+  PRODUCTS_FILE,
+  ACTIVITY_FILE,
+  NOTIFICATIONS_FILE,
+  UPLOADS_DIR,
+  ensureDataFiles
+});
+
+adminApi.registerRoutes(app);
+
 app.post("/api/submit_order", async (req, res) => {
   try {
-  const { name, phone, email, address, notes, items, total } = req.body || {};
+    const { name, phone, email, address, notes, items, total, payment_method } = req.body || {};
 
-  if (!name || !phone || !address) {
-    return res.status(400).json({ success: false, message: "Name, phone and address are required" });
-  }
-  if (!items || !items.length) {
-    return res.status(400).json({ success: false, message: "Cart is empty" });
-  }
-
-  const orderRef = generateOrderRef();
-  const order = {
-    id: Date.now(),
-    order_ref: orderRef,
-    customer_name: name,
-    customer_phone: phone,
-    customer_email: email || "",
-    customer_address: address,
-    notes: notes || "",
-    total_amount: total,
-    status: "pending",
-    items,
-    created_at: new Date().toISOString()
-  };
-
-  await saveOrder(order);
-
-  let emailBody = `NEW ORDER — MISRI CLOTH\nOrder Ref: ${orderRef}\nDate: ${order.created_at}\n\n`;
-  emailBody += `Customer: ${name}\nPhone: ${phone}\nEmail: ${email || "N/A"}\nAddress: ${address}\n`;
-  if (notes) emailBody += `Notes: ${notes}\n`;
-  emailBody += "\n--- ITEMS ---\n";
-  items.forEach(item => {
-    if (item.meters) {
-      emailBody += `${item.product_name} — ${item.meters}m @ Rs.${item.unit_price}/m = Rs.${item.line_total}\n`;
-    } else {
-      emailBody += `${item.product_name} — ${item.size}, ${item.color} x${item.quantity} = Rs.${item.line_total}\n`;
+    if (!name || !phone || !address) {
+      return res.status(400).json({ success: false, message: "Name, phone and address are required" });
     }
-  });
-  emailBody += `\nTOTAL: Rs.${total}`;
+    if (!items || !items.length) {
+      return res.status(400).json({ success: false, message: "Cart is empty" });
+    }
 
-  await notifyOwner(`New Order ${orderRef} — MISRI CLOTH`, emailBody, email);
+    for (const item of items) {
+      const product = await adminApi.getProductById(item.product_id, false);
+      if (!product) {
+        return res.status(400).json({ success: false, message: `${item.product_name} is no longer available` });
+      }
+      const needed = item.meters ? Math.ceil(item.meters) : (item.quantity || 1);
+      const availableStock = product.stockQuantity || 0;
+      
+      if (availableStock < needed) {
+        return res.status(400).json({
+          success: false,
+          message: `${product.name} is out of stock or insufficient quantity available. Available: ${availableStock}, Requested: ${needed}`
+        });
+      }
+    }
 
-  res.json({ success: true, order_ref: orderRef, message: "Order placed successfully" });
+    const orderRef = generateOrderRef();
+    const order = {
+      id: Date.now(),
+      order_ref: orderRef,
+      customer_name: name,
+      customer_phone: phone,
+      customer_email: email || "",
+      customer_address: address,
+      notes: notes || "",
+      total_amount: total,
+      status: "pending",
+      payment_method: payment_method || "COD",
+      payment_status: "pending",
+      items,
+      statusHistory: [{ status: "pending", changedAt: new Date().toISOString(), adminName: "System" }],
+      created_at: new Date().toISOString()
+    };
+
+    await saveOrder(order);
+
+    // Non-critical operations - don't fail order if these fail
+    try {
+      for (const item of items) {
+        const qty = item.meters ? Math.ceil(item.meters) : (item.quantity || 1);
+        await adminApi.adjustStock(item.product_id, -qty, "System", "Order placed — stock reduced");
+      }
+    } catch (stockErr) {
+      console.error("Stock adjustment failed:", stockErr.message);
+    }
+
+    try {
+      await adminApi.logActivity("Order Received", `New order ${orderRef} from ${name}`, "System");
+    } catch (activityErr) {
+      console.error("Activity logging failed:", activityErr.message);
+    }
+
+    try {
+      await adminApi.createNotification({
+        type: "new_order",
+        title: "New Order Received",
+        message: `Order ${orderRef} from ${name}`,
+        orderRef
+      });
+    } catch (notificationErr) {
+      console.error("Notification creation failed:", notificationErr.message);
+    }
+
+    try {
+      let emailBody = `NEW ORDER — MISRI CLOTH\nOrder Ref: ${orderRef}\nDate: ${order.created_at}\n\n`;
+      emailBody += `Customer: ${name}\nPhone: ${phone}\nEmail: ${email || "N/A"}\nAddress: ${address}\n`;
+      emailBody += `Payment: ${order.payment_method}\n`;
+      if (notes) emailBody += `Notes: ${notes}\n`;
+      emailBody += "\n--- ITEMS ---\n";
+      items.forEach((item) => {
+        if (item.meters) {
+          emailBody += `${item.product_name} — ${item.meters}m @ Rs.${item.unit_price}/m = Rs.${item.line_total}\n`;
+        } else {
+          emailBody += `${item.product_name} — ${item.size}, ${item.color} x${item.quantity} = Rs.${item.line_total}\n`;
+        }
+      });
+      emailBody += `\nTOTAL: Rs.${total}`;
+
+      await notifyOwner(`New Order ${orderRef} — MISRI CLOTH`, emailBody, email);
+    } catch (emailErr) {
+      console.error("Email notification failed:", emailErr.message);
+    }
+
+    res.json({ success: true, order_ref: orderRef, message: "Order placed successfully" });
   } catch (err) {
     console.error("submit_order failed:", err.message);
+    console.error("Full error:", err);
     res.status(500).json({
       success: false,
-      message: USE_DB
-        ? "Order could not be saved. Check DATABASE_URL on Render."
-        : "Order could not be saved. Add DATABASE_URL for permanent storage."
+      message: "Order could not be saved. Please try again or contact us directly."
     });
   }
 });
@@ -381,12 +501,18 @@ app.get("/api/messages", async (req, res) => {
 });
 
 if (require.main === module) {
+  process.on("unhandledRejection", (reason) => {
+    console.error("Unhandled promise rejection:", reason);
+  });
+
   (async () => {
     if (USE_DB) {
       await initDb();
+      await adminApi.initAdminTables();
       console.log("PostgreSQL connected. Orders saved permanently.");
     } else {
       ensureDataFiles();
+      await adminApi.initAdminTables();
       if (process.env.RENDER) {
         console.log("WARNING: DATABASE_URL missing on Render. Orders will NOT persist!");
       } else {

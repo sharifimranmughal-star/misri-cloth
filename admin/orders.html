@@ -3,153 +3,216 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Orders — MISRI CLOTH</title>
+  <title>Admin Dashboard — MISRI CLOTH</title>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="admin.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Outfit', sans-serif; background: #f5f0e8; color: #1a1210; padding: 24px; }
-    .container { max-width: 1100px; margin: 0 auto; }
-    h1 { margin-bottom: 8px; }
-    .sub { color: #7a7068; margin-bottom: 24px; }
+    body { font-family: 'Outfit', sans-serif; background: #f5f0e8; color: #1a1210; }
     .login-box { max-width: 360px; margin: 80px auto; background: white; padding: 32px; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); }
     input { width: 100%; padding: 12px; margin: 8px 0 16px; border: 1px solid #e5ddd4; border-radius: 6px; font-family: inherit; }
     button, .btn { background: #1a1210; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-family: inherit; }
     .error { color: #8b2942; margin-bottom: 12px; }
-    table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); margin-bottom: 32px; }
-    th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid #e5ddd4; font-size: 0.88rem; vertical-align: top; }
-    th { background: #1a1210; color: white; }
-    .msg-box { background: white; padding: 18px; border-radius: 10px; margin-bottom: 12px; border: 1px solid #e5ddd4; }
-    .msg-meta { font-size: 0.8rem; color: #7a7068; margin: 4px 0 8px; }
-    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-    h2 { margin: 24px 0 12px; font-size: 1.2rem; }
-    .items-list { font-size: 0.8rem; color: #555; margin-top: 4px; }
+    .sub { color: #7a7068; margin-bottom: 24px; }
     #app { display: none; }
-    .storage-badge { padding: 8px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 16px; }
+    .storage-badge { padding: 8px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 16px; display: inline-block; }
     .storage-badge.ok { background: #d4edda; color: #155724; }
     .storage-badge.warn { background: #fff3cd; color: #856404; }
+    .items-list { font-size: 0.8rem; color: #555; margin-top: 4px; }
   </style>
 </head>
 <body>
-<div class="container">
-  <div id="login-view" class="login-box">
-    <h1>MISRI CLOTH Admin</h1>
-    <p class="sub">View orders & customer messages</p>
-    <p class="error" id="login-error" style="display:none"></p>
-    <label>Password</label>
-    <input type="password" id="password" placeholder="Admin password">
-    <button onclick="login()">Login</button>
-  </div>
+<div id="login-view" class="login-box">
+  <h1>MISRI CLOTH Admin</h1>
+  <p class="sub">Sign in to manage products, orders & more</p>
+  <p class="error" id="login-error" style="display:none"></p>
+  <label>Your Name</label>
+  <input type="text" id="admin-name" placeholder="Admin name" value="Admin">
+  <label>Password</label>
+  <input type="password" id="password" placeholder="Admin password">
+  <button onclick="login()">Login</button>
+</div>
 
-  <div id="app">
-    <div class="header-row">
-      <div>
-        <h1>Orders & Messages</h1>
-        <p class="sub">All customer purchases saved on this server</p>
+<div id="app" class="admin-layout">
+  <aside class="admin-sidebar">
+    <div class="brand">MISRI CLOTH</div>
+    <ul class="admin-nav">
+      <li><button data-section="dashboard" class="active" onclick="showSection('dashboard')">📊 Dashboard</button></li>
+      <li><button data-section="products" onclick="showSection('products')">📦 Products</button></li>
+      <li><button data-section="orders" onclick="showSection('orders')">🛒 Orders</button></li>
+      <li><button data-section="customers" onclick="showSection('customers')">👥 Customers</button></li>
+      <li><button data-section="reports" onclick="showSection('reports')">📈 Reports</button></li>
+      <li><button data-section="activity" onclick="showSection('activity')">📋 Activity Log</button></li>
+      <li><button data-section="messages" onclick="showSection('messages')">✉️ Messages</button></li>
+    </ul>
+  </aside>
+
+  <main class="admin-main">
+    <div class="admin-topbar">
+      <h1 id="page-title">Dashboard</h1>
+      <div class="topbar-actions">
+        <button class="notif-btn" onclick="markAllNotificationsRead()" title="Notifications">
+          🔔 <span id="notif-badge" class="notif-badge" style="display:none">0</span>
+        </button>
+        <button onclick="logout()">Logout</button>
       </div>
-      <button onclick="logout()">Logout</button>
     </div>
+
     <div id="storage-status"></div>
-    <h2>Orders (<span id="order-count">0</span>)</h2>
-    <div id="orders-table"></div>
-    <h2>Contact Messages (<span id="msg-count">0</span>)</h2>
-    <div id="messages-list"></div>
+
+    <!-- Dashboard -->
+    <section id="section-dashboard" class="admin-section active">
+      <div id="stats-grid" class="stats-grid"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Inventory Alerts</h2></div>
+        <div id="stock-alerts"></div>
+      </div>
+    </section>
+
+    <!-- Products -->
+    <section id="section-products" class="admin-section">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Product Management</h2>
+          <div class="export-btns">
+            <button class="btn-sm btn-outline-sm" onclick="exportProducts('csv')">Export CSV</button>
+            <button class="btn-sm btn-outline-sm" onclick="exportProducts('xlsx')">Export Excel</button>
+            <button class="btn-sm btn-primary-sm" onclick="openProductModal()">+ Add Product</button>
+          </div>
+        </div>
+        <div id="products-table"></div>
+      </div>
+    </section>
+
+    <!-- Orders -->
+    <section id="section-orders" class="admin-section">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Orders (<span id="order-count">0</span>)</h2>
+          <div class="export-btns">
+            <button class="btn-sm btn-outline-sm" onclick="exportOrders('csv')">CSV</button>
+            <button class="btn-sm btn-outline-sm" onclick="exportOrders('xlsx')">Excel</button>
+            <button class="btn-sm btn-outline-sm" onclick="exportOrders('pdf')">PDF</button>
+          </div>
+        </div>
+        <div class="filters-row">
+          <input type="search" id="order-search" placeholder="Search by Order ID, Name, Phone...">
+          <select id="order-status-filter">
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="processing">Processing</option>
+            <option value="shipped">Shipped</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div class="filter-pills" style="margin-bottom:16px">
+          <button data-filter="" class="active" onclick="setOrderFilter('')">All</button>
+          <button data-filter="today" onclick="setOrderFilter('today')">Today</button>
+          <button data-filter="yesterday" onclick="setOrderFilter('yesterday')">Yesterday</button>
+          <button data-filter="week" onclick="setOrderFilter('week')">This Week</button>
+          <button data-filter="month" onclick="setOrderFilter('month')">This Month</button>
+          <button data-filter="year" onclick="setOrderFilter('year')">This Year</button>
+          <button data-filter="custom" onclick="setOrderFilter('custom')">Custom</button>
+          <input type="date" id="order-from" style="margin-left:8px">
+          <input type="date" id="order-to">
+        </div>
+        <div id="orders-table"></div>
+      </div>
+    </section>
+
+    <!-- Customers -->
+    <section id="section-customers" class="admin-section">
+      <div class="panel">
+        <div class="panel-header"><h2>Customer Records</h2></div>
+        <div id="customers-table"></div>
+      </div>
+    </section>
+
+    <!-- Reports -->
+    <section id="section-reports" class="admin-section">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Reports</h2>
+          <button class="btn-sm btn-outline-sm" onclick="exportRevenue()">Export Revenue PDF</button>
+        </div>
+        <div class="filter-pills report-pills" style="margin-bottom:16px">
+          <button data-period="today" onclick="setReportPeriod('today')">Daily</button>
+          <button data-period="week" onclick="setReportPeriod('week')">Weekly</button>
+          <button data-period="month" class="active" onclick="setReportPeriod('month')">Monthly</button>
+          <button data-period="year" onclick="setReportPeriod('year')">Yearly</button>
+        </div>
+        <div id="report-summary"></div>
+        <h3 style="margin:16px 0 8px;font-size:1rem">Best Selling Products</h3>
+        <div id="best-selling-table"></div>
+      </div>
+    </section>
+
+    <!-- Activity -->
+    <section id="section-activity" class="admin-section">
+      <div class="panel">
+        <div class="panel-header"><h2>Activity Log</h2></div>
+        <p class="sub" style="margin-bottom:12px">Complete audit trail — records are never permanently deleted.</p>
+        <div id="activity-table"></div>
+      </div>
+    </section>
+
+    <!-- Messages (preserved) -->
+    <section id="section-messages" class="admin-section">
+      <div class="panel">
+        <div class="panel-header"><h2>Contact Messages (<span id="msg-count">0</span>)</h2></div>
+        <div id="messages-list"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Product Modal -->
+<div id="product-modal" class="admin-modal-overlay">
+  <div class="admin-modal wide">
+    <button class="modal-close" type="button">&times;</button>
+    <h3 id="product-modal-title">Add Product</h3>
+    <form id="product-form">
+      <div class="form-grid">
+        <div class="form-group full"><label>Product Name *</label><input id="pf-name" required></div>
+        <div class="form-group full"><label>Description</label><textarea id="pf-desc"></textarea></div>
+        <div class="form-group"><label>Price (Rs.) *</label><input id="pf-price" type="number" min="0" required></div>
+        <div class="form-group"><label>Original Price</label><input id="pf-original" type="number" min="0"></div>
+        <div class="form-group"><label>Category</label><select id="pf-category"></select></div>
+        <div class="form-group"><label>SKU</label><input id="pf-sku" placeholder="Optional"></div>
+        <div class="form-group"><label>Stock Quantity</label><input id="pf-stock" type="number" min="0" value="0"></div>
+        <div class="form-group"><label>Status</label><select id="pf-status"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
+        <div class="form-group"><label>Badge</label><select id="pf-badge"><option value="">None</option><option value="sale">Sale</option><option value="new">New</option><option value="bestseller">Best Seller</option><option value="premium">Premium</option></select></div>
+        <div class="form-group"><label>Rating</label><input id="pf-rating" type="number" min="0" max="5" step="0.1" value="4.5"></div>
+        <div class="form-group"><label>Reviews Count</label><input id="pf-reviews" type="number" min="0" value="0"></div>
+        <div class="form-group"><label>Sizes (comma-separated)</label><input id="pf-sizes" placeholder="Custom Measurement"></div>
+        <div class="form-group"><label>Colors (comma-separated)</label><input id="pf-colors" placeholder="Navy, Black"></div>
+        <div class="form-group"><label>Reference Meters (fabric)</label><input id="pf-ref-meters" type="number" min="0" step="0.5" placeholder="4"></div>
+        <div class="form-group full">
+          <label class="form-check"><input id="pf-featured" type="checkbox"> Featured Product</label>
+          <label class="form-check"><input id="pf-new" type="checkbox"> Mark as New</label>
+          <label class="form-check"><input id="pf-visible" type="checkbox" checked> Visible on Store</label>
+        </div>
+        <div class="form-group full">
+          <label>Product Images</label>
+          <div id="upload-zone" class="upload-zone">
+            <p>Drag & drop images here or click to upload</p>
+          </div>
+          <input type="file" id="image-file-input" accept="image/*" multiple hidden>
+          <div id="image-previews" class="image-previews"></div>
+        </div>
+      </div>
+      <div style="margin-top:20px;display:flex;gap:10px">
+        <button type="submit" class="btn-sm btn-primary-sm">Save Product</button>
+        <button type="button" class="btn-sm btn-outline-sm" onclick="closeModal('#product-modal')">Cancel</button>
+      </div>
+    </form>
   </div>
 </div>
 
-<script>
-  let adminPassword = sessionStorage.getItem("misri_admin_pw") || "";
+<div id="loading-overlay" class="loading-overlay"><div class="spinner"></div></div>
 
-  if (adminPassword) loadData();
-
-  async function login() {
-    adminPassword = document.getElementById("password").value;
-    const ok = await loadData();
-    if (ok) {
-      sessionStorage.setItem("misri_admin_pw", adminPassword);
-      document.getElementById("login-view").style.display = "none";
-      document.getElementById("app").style.display = "block";
-    } else {
-      document.getElementById("login-error").style.display = "block";
-      document.getElementById("login-error").textContent = "Wrong password or server not running";
-    }
-  }
-
-  function logout() {
-    sessionStorage.removeItem("misri_admin_pw");
-    location.reload();
-  }
-
-  async function loadData() {
-    try {
-      const [ordersRes, msgsRes, healthRes] = await Promise.all([
-        fetch("/api/orders?password=" + encodeURIComponent(adminPassword)),
-        fetch("/api/messages?password=" + encodeURIComponent(adminPassword)),
-        fetch("/api/health")
-      ]);
-      if (!ordersRes.ok) return false;
-      const ordersData = await ordersRes.json();
-      const msgsData = await msgsRes.json();
-      const healthData = healthRes.ok ? await healthRes.json() : null;
-      renderStorage(healthData);
-      renderOrders(ordersData.orders || []);
-      renderMessages(msgsData.messages || []);
-      document.getElementById("login-view").style.display = "none";
-      document.getElementById("app").style.display = "block";
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  function renderStorage(health) {
-    const el = document.getElementById("storage-status");
-    if (!health) return;
-    if (health.persistent) {
-      el.className = "storage-badge ok";
-      el.textContent = "Storage: PostgreSQL (orders saved permanently)";
-    } else {
-      el.className = "storage-badge warn";
-      el.textContent = health.warning || "Storage: temporary — add DATABASE_URL on Render";
-    }
-  }
-
-  function renderOrders(orders) {
-    document.getElementById("order-count").textContent = orders.length;
-    if (!orders.length) {
-      document.getElementById("orders-table").innerHTML = "<p>No orders yet.</p>";
-      return;
-    }
-    const rows = orders.map(o => {
-      const items = (o.items || []).map(i =>
-        i.meters ? `${i.product_name} (${i.meters}m)` : `${i.product_name} x${i.quantity}`
-      ).join(", ");
-      const date = new Date(o.created_at).toLocaleString();
-      return `<tr>
-        <td><strong>${o.order_ref}</strong><div class="items-list">${items}</div></td>
-        <td>${o.customer_name}<br><a href="tel:${o.customer_phone}">${o.customer_phone}</a></td>
-        <td>${o.customer_address}</td>
-        <td>Rs. ${Number(o.total_amount).toLocaleString()}</td>
-        <td>${date}</td>
-      </tr>`;
-    }).join("");
-    document.getElementById("orders-table").innerHTML = `
-      <table><thead><tr><th>Order</th><th>Customer</th><th>Address</th><th>Total</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table>`;
-  }
-
-  function renderMessages(msgs) {
-    document.getElementById("msg-count").textContent = msgs.length;
-    if (!msgs.length) {
-      document.getElementById("messages-list").innerHTML = "<p>No messages yet.</p>";
-      return;
-    }
-    document.getElementById("messages-list").innerHTML = msgs.map(m => `
-      <div class="msg-box">
-        <strong>${m.first_name} ${m.last_name}</strong>
-        <div class="msg-meta">${m.email} · ${m.subject} · ${new Date(m.created_at).toLocaleString()}</div>
-        <p>${m.message.replace(/</g,"&lt;")}</p>
-      </div>
-    `).join("");
-  }
-</script>
+<script src="admin.js"></script>
 </body>
 </html>

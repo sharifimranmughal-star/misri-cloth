@@ -50,26 +50,6 @@ const PRODUCTS = [
   },
   {
     id: 3,
-    name: "Cotton Lawn Fabric",
-    category: "fabric",
-    price: 1200,
-    originalPrice: null,
-    badge: "bestseller",
-    rating: 4.7,
-    reviews: 312,
-    image: "https://images.unsplash.com/photo-1622445275463-afa2ab1c0c44?w=600&q=80",
-    images: [
-      "https://images.unsplash.com/photo-1622445275463-afa2ab1c0c44?w=800&q=80"
-    ],
-    sizes: ["4 Meter", "5 Meter", "6 Meter", "7 Meter", "8 Meter"],
-    colors: ["White", "Cream", "Light Blue", "Beige"],
-    referenceMeters: 4,
-    description: "Soft cotton lawn fabric for shalwar kameez and kurta. Priced per meter — minimum order 4 meters.",
-    featured: true,
-    new: false
-  },
-  {
-    id: 4,
     name: "Custom Tailored 2-Piece Suit",
     category: "suits",
     price: 15000,
@@ -84,18 +64,18 @@ const PRODUCTS = [
     ],
     sizes: ["Custom Measurement"],
     colors: ["Navy", "Charcoal", "Black", "Brown"],
-    description: "Expertly tailored 2-piece suit with jacket and trousers. Precision stitching, perfect fit guaranteed. Bring your fabric or choose from our collection.",
+    description: "Expertly tailored 2-piece suit with jacket and trousers. Precision stitching, perfect fit guaranteed.",
     featured: true,
     new: false
   },
   {
-    id: 5,
+    id: 4,
     name: "Executive 3-Piece Suit",
     category: "suits",
     price: 22000,
     originalPrice: null,
     badge: "premium",
-    rating: 5.0,
+    rating: 5,
     reviews: 78,
     image: "https://images.unsplash.com/photo-1617127365659-c47fa864d8bc?w=600&q=80",
     images: [
@@ -103,12 +83,12 @@ const PRODUCTS = [
     ],
     sizes: ["Custom Measurement"],
     colors: ["Navy", "Charcoal", "Black"],
-    description: "Premium 3-piece suit with jacket, waistcoat, and trousers. Ideal for weddings, business meetings, and formal events.",
+    description: "Premium 3-piece suit with jacket, waistcoat, and trousers. Ideal for weddings and formal events.",
     featured: true,
     new: true
   },
   {
-    id: 6,
+    id: 5,
     name: "Classic Shalwar Kameez",
     category: "shalwar-kameez",
     price: 5500,
@@ -122,12 +102,12 @@ const PRODUCTS = [
     ],
     sizes: ["Custom Measurement"],
     colors: ["White", "Cream", "Light Grey", "Navy"],
-    description: "Traditional shalwar kameez tailored to your measurements. Clean finishing, comfortable fit, and timeless Pakistani style.",
+    description: "Traditional shalwar kameez tailored to your measurements. Clean finishing and timeless Pakistani style.",
     featured: true,
     new: false
   },
   {
-    id: 7,
+    id: 6,
     name: "Embroidered Shalwar Kameez",
     category: "shalwar-kameez",
     price: 8500,
@@ -141,12 +121,12 @@ const PRODUCTS = [
     ],
     sizes: ["Custom Measurement"],
     colors: ["White", "Ivory", "Gold", "Maroon"],
-    description: "Elegant embroidered shalwar kameez for Eid, weddings, and special occasions. Fine thread work with premium fabric.",
+    description: "Elegant embroidered shalwar kameez for Eid, weddings, and special occasions.",
     featured: true,
     new: true
   },
   {
-    id: 8,
+    id: 7,
     name: "Designer Kurta Shalwar",
     category: "shalwar-kameez",
     price: 6500,
@@ -165,7 +145,7 @@ const PRODUCTS = [
     new: false
   },
   {
-    id: 9,
+    id: 8,
     name: "Winter Overcoat",
     category: "coats",
     price: 12000,
@@ -179,12 +159,12 @@ const PRODUCTS = [
     ],
     sizes: ["Custom Measurement"],
     colors: ["Black", "Charcoal", "Camel", "Navy"],
-    description: "Warm tailored overcoat for winter season. Premium lining, structured shoulders, and elegant long cut.",
+    description: "Warm tailored overcoat for winter season. Premium lining and elegant long cut.",
     featured: false,
     new: true
   },
   {
-    id: 10,
+    id: 9,
     name: "Formal Blazer Coat",
     category: "coats",
     price: 9500,
@@ -198,34 +178,15 @@ const PRODUCTS = [
     ],
     sizes: ["Custom Measurement"],
     colors: ["Navy", "Black", "Brown"],
-    description: "Single-breasted formal blazer coat. Versatile layering piece for business and semi-formal occasions.",
+    description: "Single-breasted formal blazer coat. Versatile layering piece for business occasions.",
     featured: false,
     new: false
   },
   {
-    id: 11,
-    name: "Velvet Waistcoat",
-    category: "waistcoats",
-    price: 4500,
-    originalPrice: null,
-    badge: "premium",
-    rating: 4.9,
-    reviews: 98,
-    image: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=600&q=80",
-    images: [
-      "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=800&q=80"
-    ],
-    sizes: ["Custom Measurement"],
-    colors: ["Burgundy", "Navy", "Black", "Emerald"],
-    description: "Luxurious velvet waistcoat with satin back and fine button detailing. Perfect for weddings and formal events.",
-    featured: false,
-    new: false
-  },
-  {
-    id: 12,
+    id: 10,
     name: "Classic Waistcoat",
     category: "waistcoats",
-    price: 3500,
+    price: 4000,
     originalPrice: 4000,
     badge: "sale",
     rating: 4.6,
@@ -242,8 +203,8 @@ const PRODUCTS = [
   }
 ];
 
-function getProductById(id) {
-  return PRODUCTS.find(p => p.id === Number(id));
+function getCategoryLabel(category) {
+  return CATEGORY_LABELS[category] || category;
 }
 
 function getFeaturedProducts() {
@@ -251,102 +212,256 @@ function getFeaturedProducts() {
 }
 
 function getProductsByCategory(category) {
-  if (!category || category === "all") return PRODUCTS;
+  if (category === "all") return PRODUCTS;
   return PRODUCTS.filter(p => p.category === category);
 }
 
-function getCategoryLabel(category) {
-  return CATEGORY_LABELS[category] || category;
+function getProductById(id) {
+  if (id == null || id === "") return undefined;
+  const numId = Number(id);
+  return PRODUCTS.find(p => Number(p.id) === numId);
 }
 
 function isFabricProduct(product) {
   return product && product.category === "fabric";
 }
 
-function parseMetersFromSize(size) {
-  const match = String(size).match(/(\d+(?:\.\d+)?)/);
-  return match ? parseFloat(match[1]) : 4;
+function isOutOfStock(product) {
+  const stock = product.stockQuantity ?? 0;
+  return stock === 0;
 }
 
-function getReferenceMeters(product) {
-  return product.referenceMeters || 4;
+function parseMetersFromSize(size) {
+  const match = String(size).match(/(\d+)\s*Meter/);
+  return match ? Number(match[1]) : 4;
 }
 
 function getPerMeterPrice(product) {
-  return product.price / getReferenceMeters(product);
+  return product.price / product.referenceMeters;
 }
 
 function getFabricLineTotal(product, meters) {
-  return Math.round(getPerMeterPrice(product) * meters);
+  return getPerMeterPrice(product) * meters;
 }
 
 function getLineTotal(item) {
   if (item.isFabric) {
-    return Math.round(item.unitPrice * item.meters);
+    return item.unitPrice * item.meters;
   }
   return item.unitPrice * item.qty;
 }
 
 function formatPrice(price) {
-  return "Rs. " + price.toLocaleString("en-PK");
+  return "Rs. " + Number(price).toLocaleString();
 }
 
 function renderStars(rating) {
   const full = Math.floor(rating);
-  const half = rating % 1 >= 0.5;
-  let html = "";
-  for (let i = 0; i < full; i++) html += '<i class="fas fa-star"></i>';
-  if (half) html += '<i class="fas fa-star-half-alt"></i>';
-  for (let i = full + (half ? 1 : 0); i < 5; i++) html += '<i class="far fa-star"></i>';
-  return html;
-}
-
-function badgeLabel(badge) {
-  const labels = {
-    sale: "Sale",
-    new: "New",
-    bestseller: "Best Seller",
-    premium: "Premium"
-  };
-  return labels[badge] || badge;
+  const half = rating % 1 >= 0.5 ? 1 : 0;
+  const empty = 5 - full - half;
+  return "★".repeat(full) + (half ? "½" : "") + "☆".repeat(empty);
 }
 
 function productCardHTML(product) {
-  const badgeHTML = product.badge
-    ? `<span class="product-badge badge-${product.badge}">${badgeLabel(product.badge)}</span>`
+  const badgeHTML = product.badge 
+    ? `<span class="product-badge badge-${product.badge}">${product.badge}</span>` 
     : "";
+  
+  const priceHTML = product.originalPrice 
+    ? `<span class="price-old">${formatPrice(product.originalPrice)}</span><span>${formatPrice(product.price)}</span>`
+    : `<span>${formatPrice(product.price)}</span>`;
 
-  let priceHTML;
-  if (isFabricProduct(product)) {
-    const perMeter = getPerMeterPrice(product);
-    const minTotal = getFabricLineTotal(product, 4);
-    priceHTML = `<span class="price-current">${formatPrice(perMeter)}/meter</span><span class="price-note">from ${formatPrice(minTotal)} (4m)</span>`;
-  } else if (product.originalPrice) {
-    priceHTML = `<span class="price-old">${formatPrice(product.originalPrice)}</span><span class="price-current">${formatPrice(product.price)}</span>`;
-  } else {
-    priceHTML = `<span class="price-current">${formatPrice(product.price)}</span>`;
-  }
+  const stock = product.stockQuantity || 0;
+  const isOutOfStock = stock === 0;
+  const stockText = stock <= 5 && stock > 0 ? `Only ${stock} left in stock` : (stock > 5 ? `${stock} in stock` : "Out of Stock");
+  const stockClass = stock === 0 ? "out-of-stock" : (stock <= 5 ? "low-stock" : "in-stock");
 
   return `
-    <article class="product-card" data-id="${product.id}">
-      <a href="product.html?id=${product.id}" class="product-card-link">
-        <div class="product-image-wrap">
-          ${badgeHTML}
-          <img src="${product.image}" alt="${product.name}" loading="lazy">
-          <div class="product-overlay">
-            <span class="overlay-btn">Quick View</span>
-          </div>
-        </div>
-        <div class="product-info">
-          <span class="product-category">${getCategoryLabel(product.category)}</span>
-          <h3 class="product-name">${product.name}</h3>
-          <div class="product-rating">${renderStars(product.rating)} <span>(${product.reviews})</span></div>
-          <div class="product-price">${priceHTML}</div>
-        </div>
+    <div class="product-card ${product.new ? 'new' : ''} ${isOutOfStock ? 'out-of-stock' : ''}">
+      ${badgeHTML}
+      <a href="product.html?id=${product.id}" class="product-image">
+        <img src="${product.image}" alt="${product.name}" loading="lazy">
       </a>
-      <button class="btn-add-cart" data-id="${product.id}" aria-label="Add ${product.name} to cart">
-        <i class="fas fa-shopping-bag"></i> Add to Cart
-      </button>
-    </article>
+      <div class="product-info">
+        <span class="product-category">${getCategoryLabel(product.category)}</span>
+        <h3><a href="product.html?id=${product.id}">${product.name}</a></h3>
+        <div class="product-rating">${renderStars(product.rating)} <span>(${product.reviews})</span></div>
+        <div class="product-price">${priceHTML}</div>
+        <div class="product-stock ${stockClass}">${stockText}</div>
+        <button class="btn btn-primary btn-add-cart" data-id="${product.id}" ${isOutOfStock ? 'disabled' : ''}>
+          ${isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
+        </button>
+      </div>
+    </div>
   `;
+}
+
+// Real-time updates via SSE
+let eventSource = null;
+let productsLoadedFromApi = false;
+
+async function loadProductsFromAPI() {
+  try {
+    const response = await fetch('/api/products');
+    const data = await response.json();
+    if (data.success && data.products) {
+      // Normalize product fields to match expected structure
+      const normalizedProducts = data.products.map(p => ({
+        ...p,
+        id: Number(p.id),
+        // Ensure price field exists
+        price: p.price || 0,
+        // Normalize field names for cart compatibility
+        stockQuantity: p.stockQuantity || p.stock_quantity || 0,
+        originalPrice: p.originalPrice || p.original_price || null,
+        // Ensure required fields
+        category: p.category || 'fabric',
+        sizes: p.sizes || ["Custom Measurement"],
+        colors: p.colors || [],
+        images: p.images || [p.image || ""],
+        referenceMeters: p.referenceMeters || p.reference_meters || 4
+      }));
+      
+      // Replace the static PRODUCTS array with API data
+      PRODUCTS.length = 0;
+      PRODUCTS.push(...normalizedProducts);
+      productsLoadedFromApi = true;
+      console.log('Products loaded from API:', PRODUCTS.length);
+      console.log('Sample product:', PRODUCTS[0]);
+      refreshProductDisplays();
+    }
+  } catch (err) {
+    console.error('Error loading products from API:', err);
+  }
+}
+
+function connectToEvents() {
+  if (eventSource) {
+    eventSource.close();
+  }
+  
+  try {
+    eventSource = new EventSource('/api/events');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('SSE Event received:', data);
+        handleProductEvent(data);
+      } catch (err) {
+        console.error('Error parsing SSE event:', err);
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.log('SSE connection error:', error);
+      console.log('Reconnecting in 3 seconds...');
+      setTimeout(connectToEvents, 3000);
+    };
+    
+    console.log('SSE connection established');
+  } catch (err) {
+    console.error('Error connecting to SSE:', err);
+    setTimeout(connectToEvents, 3000);
+  }
+}
+
+function handleProductEvent(event) {
+  console.log('Handling product event:', event.type);
+  switch(event.type) {
+    case 'product_updated':
+      loadProductsFromAPI(); // Reload all products from API
+      break;
+    case 'product_deleted':
+      loadProductsFromAPI(); // Reload all products from API
+      break;
+    case 'stock_updated':
+      updateStockInArray(event.productId, event.stock);
+      break;
+    case 'connected':
+      console.log('Connected to real-time product updates');
+      loadProductsFromAPI(); // Load initial products
+      break;
+    default:
+      console.log('Unknown event type:', event.type);
+  }
+}
+
+function updateStockInArray(productId, newStock) {
+  const product = PRODUCTS.find(p => p.id === productId);
+  if (product) {
+    product.stockQuantity = newStock;
+    console.log(`Stock updated for ${product.name}: ${newStock} units`);
+    refreshProductDisplays();
+  }
+}
+
+function updateProductDetailStock(productId) {
+  const addBtn = document.querySelector("#add-to-cart-btn");
+  if (!addBtn) return;
+
+  const product = getProductById(productId);
+  if (!product) return;
+
+  const outOfStock = isOutOfStock(product);
+  const actions = document.querySelector(".product-actions");
+  const existingNotice = actions?.querySelector(".stock-notice");
+
+  if (outOfStock) {
+    addBtn.disabled = true;
+    addBtn.textContent = "Out of Stock";
+    if (actions && !existingNotice) {
+      actions.insertAdjacentHTML("afterbegin", '<p class="stock-notice" style="color:#8b2942;font-weight:600;margin-bottom:12px">This item is currently out of stock.</p>');
+    }
+  } else {
+    addBtn.disabled = false;
+    addBtn.innerHTML = '<i class="fas fa-shopping-bag"></i> Add to Cart';
+    existingNotice?.remove();
+  }
+}
+
+function refreshProductDisplays() {
+  console.log('Refreshing product displays');
+  // Re-render product cards on current page
+  const featured = document.querySelector("#featured-products");
+  if (featured) {
+    featured.innerHTML = getFeaturedProducts().map(productCardHTML).join("");
+    console.log('Featured products refreshed');
+  }
+  
+  const shopGrid = document.querySelector("#shop-products");
+  if (shopGrid) {
+    // Re-render shop page based on current filters
+    const activeCategory = document.querySelector('input[name="category"]:checked')?.value || "all";
+    const products = getProductsByCategory(activeCategory);
+    shopGrid.innerHTML = products.map(productCardHTML).join("");
+    const countEl = document.querySelector(".shop-count");
+    if (countEl) countEl.textContent = `Showing ${products.length} products`;
+    console.log('Shop products refreshed');
+  }
+
+  const productId = new URLSearchParams(window.location.search).get("id");
+  if (productId) {
+    if (typeof initProductPage === "function") initProductPage();
+    updateProductDetailStock(productId);
+  }
+}
+
+// Initialize SSE connection when DOM is ready
+if (typeof window !== 'undefined') {
+  console.log('Window detected, initializing SSE');
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('DOM loaded, connecting to SSE');
+      connectToEvents();
+    });
+  } else {
+    console.log('DOM already loaded, connecting to SSE immediately');
+    connectToEvents();
+  }
+}
+
+// Also load products immediately for initial render
+if (typeof window !== 'undefined') {
+  loadProductsFromAPI();
 }

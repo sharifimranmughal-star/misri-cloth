@@ -1,5 +1,9 @@
 const CART_KEY = "misri_cart";
 const API_BASE = "/api";
+const DELIVERY_CHARGE = 250;
+const FREE_DELIVERY_MIN = 5000;
+const EASYPAYSA_NUMBER = "03348711716";
+const EASYPAYSA_NAME = "Imran Sabir";
 
 function getCart() {
   try {
@@ -23,11 +27,18 @@ function addToCart(productId, size, color, qty = 1) {
   const product = getProductById(productId);
   if (!product) return;
 
+  if (isOutOfStock(product)) {
+    showToast("This product is out of stock");
+    return;
+  }
+
   const selectedSize = size || product.sizes[0];
   const selectedColor = color || product.colors[0];
   const cart = getCart();
   const key = buildCartKey(productId, selectedSize, selectedColor);
   const existing = cart.find(item => item.key === key);
+
+  console.log('Adding to cart:', { productId, productName: product.name, productPrice: product.price, selectedSize, selectedColor });
 
   if (isFabricProduct(product)) {
     const meters = parseMetersFromSize(selectedSize);
@@ -36,11 +47,12 @@ function addToCart(productId, size, color, qty = 1) {
       return;
     }
     const unitPrice = getPerMeterPrice(product);
+    console.log('Fabric unit price:', unitPrice);
 
     if (existing) {
       existing.meters = meters;
       existing.size = selectedSize;
-      existing.unitPrice = unitPrice;
+      existing.unitPrice = Number(unitPrice) || 0;
     } else {
       cart.push({
         key,
@@ -51,7 +63,7 @@ function addToCart(productId, size, color, qty = 1) {
         color: selectedColor,
         isFabric: true,
         meters,
-        unitPrice,
+        unitPrice: Number(unitPrice) || 0,
         qty: 1
       });
     }
@@ -63,7 +75,7 @@ function addToCart(productId, size, color, qty = 1) {
   if (existing) {
     existing.qty += qty;
   } else {
-    cart.push({
+    const cartItem = {
       key,
       id: product.id,
       name: product.name,
@@ -71,9 +83,11 @@ function addToCart(productId, size, color, qty = 1) {
       size: selectedSize,
       color: selectedColor,
       isFabric: false,
-      unitPrice: product.price,
+      unitPrice: Number(product.price) || 0,
       qty
-    });
+    };
+    console.log('Cart item being added:', cartItem);
+    cart.push(cartItem);
   }
 
   saveCart(cart);
@@ -109,8 +123,20 @@ function updateCartQty(key, qty) {
   saveCart(cart);
 }
 
-function getCartTotal() {
+function getCartSubtotal() {
   return getCart().reduce((sum, item) => sum + getLineTotal(item), 0);
+}
+
+function getDeliveryCharge(subtotal) {
+  return subtotal >= FREE_DELIVERY_MIN ? 0 : DELIVERY_CHARGE;
+}
+
+function getOrderTotal(subtotal) {
+  return subtotal + getDeliveryCharge(subtotal);
+}
+
+function getCartTotal() {
+  return getCartSubtotal();
 }
 
 function getCartCount() {
@@ -145,6 +171,40 @@ function showToast(message) {
   toast._timer = setTimeout(() => toast.classList.remove("show"), 3200);
 }
 
+function formatDeliveryLine(subtotal) {
+  return getDeliveryCharge(subtotal) === 0 ? "FREE" : formatPrice(DELIVERY_CHARGE);
+}
+
+function updateCheckoutTotals() {
+  const subtotal = getCartSubtotal();
+  const subtotalEl = document.querySelector("#checkout-subtotal");
+  const deliveryEl = document.querySelector("#checkout-delivery");
+  const totalEl = document.querySelector("#checkout-total");
+  const paymentMethodEl = document.querySelector("#checkout-payment-method");
+
+  if (subtotalEl) subtotalEl.textContent = formatPrice(subtotal);
+  if (deliveryEl) {
+    deliveryEl.textContent = formatDeliveryLine(subtotal);
+    deliveryEl.classList.toggle("delivery-free", getDeliveryCharge(subtotal) === 0);
+  }
+  if (totalEl) totalEl.textContent = formatPrice(getOrderTotal(subtotal));
+  if (paymentMethodEl) {
+    const method = document.querySelector("#checkout-payment")?.value || "COD";
+    paymentMethodEl.textContent = method === "Online Payment" ? "Online Payment" : "COD";
+  }
+
+  const easypaisaAmount = document.querySelector(".easypaisa-amount");
+  if (easypaisaAmount) easypaisaAmount.textContent = formatPrice(getOrderTotal(subtotal));
+}
+
+function toggleOnlinePaymentInfo() {
+  const method = document.querySelector("#checkout-payment")?.value;
+  const panel = document.querySelector("#online-payment-info");
+  if (!panel) return;
+  panel.hidden = method !== "Online Payment";
+  updateCheckoutTotals();
+}
+
 function renderCartDrawer() {
   const cart = getCart();
   const itemsEl = document.querySelector(".cart-items");
@@ -166,6 +226,7 @@ function renderCartDrawer() {
 
   itemsEl.innerHTML = cart.map(item => {
     const lineTotal = getLineTotal(item);
+    console.log('Cart item:', { name: item.name, unitPrice: item.unitPrice, lineTotal });
     const detailLine = item.isFabric
       ? `${item.meters} meter${item.meters > 1 ? "s" : ""} · ${item.color} · ${formatPrice(item.unitPrice)}/m`
       : `${item.size} · ${item.color}`;
@@ -200,44 +261,69 @@ function renderCartDrawer() {
     `;
   }).join("");
 
-  if (totalEl) totalEl.textContent = formatPrice(getCartTotal());
+  const subtotal = getCartSubtotal();
+  if (totalEl) {
+    totalEl.innerHTML = `${formatPrice(subtotal)}<small class="cart-delivery-note">+ delivery at checkout</small>`;
+  }
 }
 
 function injectCheckoutModal() {
-  if (document.querySelector(".checkout-modal")) return;
+  document.querySelector(".checkout-modal")?.remove();
 
   const modal = document.createElement("div");
   modal.className = "checkout-modal";
   modal.innerHTML = `
     <div class="checkout-overlay"></div>
     <div class="checkout-box">
-      <button class="checkout-close" aria-label="Close checkout"><i class="fas fa-times"></i></button>
+      <button type="button" class="checkout-close" aria-label="Close checkout"><i class="fas fa-times"></i></button>
       <h3>Complete Your Order</h3>
       <p class="checkout-subtitle">Enter your details. We will confirm your order by phone or WhatsApp.</p>
-      <form id="checkout-form">
+      <form id="checkout-form" novalidate>
         <div class="form-group">
           <label for="checkout-name">Full Name *</label>
-          <input type="text" id="checkout-name" name="name" required placeholder="Your full name">
+          <input type="text" id="checkout-name" name="name" required placeholder="Your full name" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label for="checkout-country">Country *</label>
+          <select id="checkout-country" name="country" required>${phoneCountryOptions("PK")}</select>
         </div>
         <div class="form-group">
           <label for="checkout-phone">Phone Number *</label>
-          <input type="tel" id="checkout-phone" name="phone" required placeholder="03XX-XXXXXXX">
+          <input type="tel" id="checkout-phone" name="phone" required inputmode="numeric" autocomplete="tel-national">
+          <small id="phone-hint" class="field-hint"></small>
         </div>
         <div class="form-group">
-          <label for="checkout-email">Email</label>
-          <input type="email" id="checkout-email" name="email" placeholder="your@email.com">
+          <label for="checkout-email">Email *</label>
+          <input type="email" id="checkout-email" name="email" required placeholder="your@email.com" autocomplete="email">
         </div>
         <div class="form-group">
           <label for="checkout-address">Address / City *</label>
-          <textarea id="checkout-address" name="address" required placeholder="Delivery or pickup address"></textarea>
+          <textarea id="checkout-address" name="address" required placeholder="Full delivery address with city"></textarea>
         </div>
         <div class="form-group">
           <label for="checkout-notes">Order Notes</label>
           <textarea id="checkout-notes" name="notes" placeholder="Measurements, special instructions..."></textarea>
         </div>
-        <div class="checkout-summary">
-          <span>Order Total</span>
-          <strong id="checkout-total">${formatPrice(0)}</strong>
+        <div class="form-group">
+          <label for="checkout-payment">Payment Method *</label>
+          <select id="checkout-payment" name="payment_method" required>
+            <option value="COD">Cash on Delivery (COD)</option>
+            <option value="Online Payment">Online Payment (Easypaisa)</option>
+          </select>
+        </div>
+        <div id="online-payment-info" class="online-payment-info" hidden>
+          <p><strong>EasyPaisa</strong></p>
+          <p>Account Name: <strong>${EASYPAYSA_NAME}</strong></p>
+          <p>Number: <strong>${EASYPAYSA_NUMBER}</strong></p>
+          <p>Amount to send: <strong class="easypaisa-amount">${formatPrice(0)}</strong></p>
+          <p class="field-hint">Send payment for the order total above, then click Place Order. We will verify before dispatch.</p>
+        </div>
+        <div class="checkout-summary-block">
+          <div class="checkout-line"><span>Subtotal</span><span id="checkout-subtotal">${formatPrice(0)}</span></div>
+          <div class="checkout-line"><span>Delivery</span><span id="checkout-delivery">${formatPrice(DELIVERY_CHARGE)}</span></div>
+          <div class="checkout-line"><span>Payment Method</span><span id="checkout-payment-method">COD</span></div>
+          <div class="checkout-line checkout-line-total"><span>Total</span><strong id="checkout-total">${formatPrice(DELIVERY_CHARGE)}</strong></div>
+          <p class="delivery-note">Delivery Rs. ${DELIVERY_CHARGE.toLocaleString()} · FREE on orders over ${formatPrice(FREE_DELIVERY_MIN)}</p>
         </div>
         <button type="submit" class="btn btn-primary checkout-submit" style="width:100%">
           <i class="fas fa-check"></i> Place Order
@@ -247,9 +333,20 @@ function injectCheckoutModal() {
   `;
   document.body.appendChild(modal);
 
-  modal.querySelector(".checkout-overlay").addEventListener("click", closeCheckout);
-  modal.querySelector(".checkout-close").addEventListener("click", closeCheckout);
-  modal.querySelector("#checkout-form").addEventListener("submit", submitOrder);
+  bindPhoneCountryField(
+    modal.querySelector("#checkout-country"),
+    modal.querySelector("#checkout-phone"),
+    modal.querySelector("#phone-hint")
+  );
+
+  modal.querySelector("#checkout-payment")?.addEventListener("change", toggleOnlinePaymentInfo);
+  modal.querySelector(".checkout-overlay")?.addEventListener("click", closeCheckout);
+  modal.querySelector(".checkout-close")?.addEventListener("click", closeCheckout);
+  modal.querySelector("#checkout-form")?.addEventListener("submit", submitOrder);
+
+  modal.querySelectorAll("#checkout-phone, #checkout-email").forEach((input) => {
+    input.addEventListener("input", () => clearFieldError(input));
+  });
 }
 
 function openCheckout() {
@@ -259,10 +356,9 @@ function openCheckout() {
     return;
   }
   injectCheckoutModal();
-  const modal = document.querySelector(".checkout-modal");
-  const totalEl = document.querySelector("#checkout-total");
-  if (totalEl) totalEl.textContent = formatPrice(getCartTotal());
-  modal.classList.add("open");
+  updateCheckoutTotals();
+  toggleOnlinePaymentInfo();
+  document.querySelector(".checkout-modal")?.classList.add("open");
   document.body.style.overflow = "hidden";
   document.querySelector(".cart-drawer")?.classList.remove("open");
   document.querySelector(".cart-overlay")?.classList.remove("open");
@@ -271,6 +367,39 @@ function openCheckout() {
 function closeCheckout() {
   document.querySelector(".checkout-modal")?.classList.remove("open");
   document.body.style.overflow = "";
+}
+
+function validateCheckoutForm(form) {
+  let valid = true;
+  const country = form.country.value;
+  const phoneInput = form.phone;
+  const emailInput = form.email;
+
+  clearFieldError(phoneInput);
+  clearFieldError(emailInput);
+
+  const phoneResult = validatePhone(country, phoneInput.value);
+  if (!phoneResult.valid) {
+    showFieldError(phoneInput, phoneResult.message);
+    valid = false;
+  }
+
+  const emailResult = validateEmail(emailInput.value, true);
+  if (!emailResult.valid) {
+    showFieldError(emailInput, emailResult.message);
+    valid = false;
+  }
+
+  if (!form.name.value.trim()) {
+    showToast("Please enter your full name");
+    valid = false;
+  }
+  if (!form.address.value.trim()) {
+    showToast("Please enter your delivery address");
+    valid = false;
+  }
+
+  return valid ? { phoneResult, emailResult } : null;
 }
 
 async function submitOrder(e) {
@@ -283,23 +412,46 @@ async function submitOrder(e) {
     return;
   }
 
+  const validated = validateCheckoutForm(form);
+  if (!validated) return;
+
+  const subtotal = getCartSubtotal();
+  const deliveryCharge = getDeliveryCharge(subtotal);
+  const total = getOrderTotal(subtotal);
+  const paymentMethod = form.payment_method.value;
+
+  if (paymentMethod === "Online Payment") {
+    const confirmed = confirm(
+      `Have you sent ${formatPrice(total)} to Easypaisa ${EASYPAYSA_NUMBER} (${EASYPAYSA_NAME})?\n\nClick OK only after payment is sent.`
+    );
+    if (!confirmed) {
+      showToast("Please complete Easypaisa payment first");
+      return;
+    }
+  }
+
   const payload = {
     name: form.name.value.trim(),
-    phone: form.phone.value.trim(),
-    email: form.email.value.trim(),
+    phone: validated.phoneResult.formatted,
+    phone_country: form.country.value,
+    email: validated.emailResult.email,
     address: form.address.value.trim(),
     notes: form.notes.value.trim(),
+    payment_method: paymentMethod,
+    subtotal,
+    delivery_charge: deliveryCharge,
+    total,
     items: cart.map(item => ({
       product_id: item.id,
       product_name: item.name,
+      image: item.image,
       size: item.size,
       color: item.color,
       meters: item.isFabric ? item.meters : null,
       unit_price: item.unitPrice,
       quantity: item.isFabric ? 1 : item.qty,
       line_total: getLineTotal(item)
-    })),
-    total: getCartTotal()
+    }))
   };
 
   btn.disabled = true;
@@ -322,7 +474,7 @@ async function submitOrder(e) {
     } else {
       showToast(data.message || "Could not place order. Please call us.");
     }
-  } catch (err) {
+  } catch {
     showToast("Cannot reach server. Run: npm start in misri-cloth folder, then open http://localhost:3000");
   }
 
@@ -332,8 +484,14 @@ async function submitOrder(e) {
 
 function initCartDrawer() {
   injectCheckoutModal();
+  updateCartCount();
 
-  document.addEventListener("click", e => {
+  document.addEventListener("cartUpdated", () => {
+    updateCartCount();
+    renderCartDrawer();
+  });
+
+  document.addEventListener("click", async e => {
     if (e.target.closest(".cart-toggle")) {
       document.querySelector(".cart-drawer")?.classList.add("open");
       document.querySelector(".cart-overlay")?.classList.add("open");
@@ -369,16 +527,14 @@ function initCartDrawer() {
       e.preventDefault();
       e.stopPropagation();
       const btn = e.target.closest(".btn-add-cart");
+      if (btn.disabled) return;
       const id = Number(btn.dataset.id);
       const product = getProductById(id);
       if (product && isFabricProduct(product)) {
-        addToCart(id, "4 Meter", product.colors[0], 1);
+        await addToCart(id, "4 Meter", product.colors[0], 1);
       } else {
-        addToCart(id);
+        await addToCart(id);
       }
     }
   });
-
-  document.addEventListener("cartUpdated", renderCartDrawer);
-  updateCartCount();
 }

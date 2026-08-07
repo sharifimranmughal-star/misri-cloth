@@ -1,10 +1,4 @@
-document.addEventListener("DOMContentLoaded", () => {
-  initMobileNav();
-  initCartDrawer();
-  initScrollReveal();
-  initNewsletter();
-  highlightActiveNav();
-});
+
 
 function initMobileNav() {
   const toggle = document.querySelector(".menu-toggle");
@@ -56,6 +50,11 @@ function initNewsletter() {
       e.preventDefault();
       const input = form.querySelector("input");
       if (input?.value) {
+        const emailResult = validateEmail(input.value, true);
+        if (!emailResult.valid) {
+          showToast(emailResult.message);
+          return;
+        }
         showToast("Thank you for subscribing!");
         input.value = "";
       }
@@ -131,17 +130,31 @@ function initShopPage() {
 }
 
 function initProductPage() {
+  const section = document.querySelector(".product-detail");
+  if (!section) return;
+
   const params = new URLSearchParams(window.location.search);
   const id = params.get("id");
+  if (!id) return;
+
   const product = getProductById(id);
 
   if (!product) {
-    document.querySelector(".product-detail")?.insertAdjacentHTML(
-      "afterbegin",
-      '<div class="container" style="padding:80px 0;text-align:center"><h2>Product not found</h2><a href="shop.html" class="btn btn-primary" style="margin-top:20px">Back to Shop</a></div>'
-    );
+    if (typeof productsLoadedFromApi !== "undefined" && productsLoadedFromApi) {
+      if (!section.querySelector(".product-not-found-msg")) {
+        section.insertAdjacentHTML(
+          "afterbegin",
+          '<div class="container product-not-found-msg" style="padding:80px 0;text-align:center"><h2>Product not found</h2><a href="shop.html" class="btn btn-primary" style="margin-top:20px">Back to Shop</a></div>'
+        );
+      }
+    }
     return;
   }
+
+  section.querySelector(".product-not-found-msg")?.remove();
+
+  if (section.dataset.rendered === String(id)) return;
+  section.dataset.rendered = String(id);
 
   document.title = `${product.name} — MISRI CLOTH`;
 
@@ -246,12 +259,19 @@ function initProductPage() {
   });
 
   document.querySelector("#add-to-cart-btn")?.addEventListener("click", () => {
+    const currentProduct = getProductById(id);
+    if (isOutOfStock(currentProduct)) {
+      showToast("This product is out of stock");
+      return;
+    }
     if (isFabric) {
       addToCart(product.id, selectedSize, selectedColor, 1);
     } else {
       addToCart(product.id, selectedSize, selectedColor, qty);
     }
   });
+
+  updateProductDetailStock(id);
 
   const related = document.querySelector("#related-products");
   if (related) {
@@ -307,11 +327,21 @@ async function initContactForm() {
 
   form.addEventListener("submit", async e => {
     e.preventDefault();
+    const emailInput = form.email;
+    const emailResult = validateEmail(emailInput.value.trim(), true);
+    
+    if (!emailResult.valid) {
+      showFieldError(emailInput, emailResult.message);
+      return;
+    }
+    
+    clearFieldError(emailInput);
+    
     const btn = form.querySelector('button[type="submit"]');
     const payload = {
       firstName: form.firstName.value.trim(),
       lastName: form.lastName.value.trim(),
-      email: form.email.value.trim(),
+      email: emailResult.email,
       subject: form.subject.value,
       message: form.message.value.trim()
     };
@@ -340,9 +370,16 @@ async function initContactForm() {
     btn.disabled = false;
     btn.textContent = originalText;
   });
+  
+  form.email?.addEventListener("input", () => clearFieldError(form.email));
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  initMobileNav();
+  initCartDrawer();
+  initScrollReveal();
+  initNewsletter();
+  highlightActiveNav();
   initHomePage();
   initShopPage();
   initProductPage();
@@ -350,3 +387,4 @@ document.addEventListener("DOMContentLoaded", () => {
   initWhatsApp();
   initContactForm();
 });
+

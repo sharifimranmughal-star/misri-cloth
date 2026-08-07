@@ -1,3 +1,9 @@
+databases:
+  - name: misri-cloth-db
+    databaseName: misri_cloth
+    user: misri_cloth
+    plan: free
+
 services:
   - type: web
     name: misri-cloth
@@ -5,7 +11,11 @@ services:
     plan: free
     buildCommand: npm install
     startCommand: npm start
-    healthCheckPath: /
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: misri-cloth-db
+          property: connectionString
