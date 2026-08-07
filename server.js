@@ -35,6 +35,18 @@ const dbPool = USE_DB
     })
   : null;
 
+let dbAvailable = USE_DB;
+
+async function checkDbAvailable() {
+  if (!dbPool) return false;
+  try {
+    await dbPool.query("SELECT 1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 app.use(express.json({ limit: "5mb" }));
 app.use(express.static(ROOT));
 app.use("/uploads", express.static(UPLOADS_DIR));
@@ -114,7 +126,7 @@ async function initDb() {
 }
 
 async function saveOrder(order) {
-  if (!USE_DB) {
+  if (!USE_DB || !(await checkDbAvailable())) {
     const orders = readJson(ORDERS_FILE);
     orders.unshift(order);
     writeJson(ORDERS_FILE, orders);
@@ -169,7 +181,7 @@ async function saveOrder(order) {
 }
 
 async function saveContact(entry) {
-  if (!USE_DB) {
+  if (!USE_DB || !(await checkDbAvailable())) {
     const messages = readJson(MESSAGES_FILE);
     messages.unshift(entry);
     writeJson(MESSAGES_FILE, messages);
@@ -184,7 +196,7 @@ async function saveContact(entry) {
 }
 
 async function getOrders() {
-  if (!USE_DB) return readJson(ORDERS_FILE);
+  if (!USE_DB || !(await checkDbAvailable())) return readJson(ORDERS_FILE);
 
   const ordersResult = await dbPool.query(
     `SELECT id, order_ref, customer_name, customer_phone, customer_email, customer_address,
@@ -249,7 +261,7 @@ async function getOrders() {
 }
 
 async function getMessages() {
-  if (!USE_DB) return readJson(MESSAGES_FILE);
+  if (!USE_DB || !(await checkDbAvailable())) return readJson(MESSAGES_FILE);
 
   const result = await dbPool.query(
     `SELECT id, first_name, last_name, email, subject, message, created_at
@@ -470,6 +482,8 @@ app.get("/api/health", async (req, res) => {
     persistent: USE_DB && dbOk,
     warning: !USE_DB && process.env.RENDER
       ? "Orders will disappear on restart. Add DATABASE_URL in Render Environment."
+      : USE_DB && !dbOk
+      ? "Database configured but connection failed. Using JSON storage fallback."
       : null
   });
 });
@@ -506,18 +520,31 @@ if (require.main === module) {
   });
 
   (async () => {
-    if (USE_DB) {
-      await initDb();
-      await adminApi.initAdminTables();
-      console.log("PostgreSQL connected. Orders saved permanently.");
-    } else {
+    try {
+      if (USE_DB) {
+        await initDb();
+        await adminApi.initAdminTables();
+        dbAvailable = await checkDbAvailable();
+        if (dbAvailable) {
+          console.log("PostgreSQL connected. Orders saved permanently.");
+        } else {
+          console.log("PostgreSQL connection failed during startup. Using JSON storage fallback.");
+        }
+      } else {
+        ensureDataFiles();
+        await adminApi.initAdminTables();
+        if (process.env.RENDER) {
+          console.log("WARNING: DATABASE_URL missing on Render. Orders will NOT persist!");
+        } else {
+          console.log("Using local JSON storage.");
+        }
+      }
+    } catch (dbErr) {
+      console.error("Database connection failed, falling back to JSON storage:", dbErr.message);
+      dbAvailable = false;
       ensureDataFiles();
       await adminApi.initAdminTables();
-      if (process.env.RENDER) {
-        console.log("WARNING: DATABASE_URL missing on Render. Orders will NOT persist!");
-      } else {
-        console.log("Using local JSON storage.");
-      }
+      console.log("Using local JSON storage (fallback).");
     }
 
     app.listen(PORT, "0.0.0.0", () => {
