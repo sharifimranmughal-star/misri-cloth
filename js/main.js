@@ -137,16 +137,20 @@ function initProductPage() {
   const id = params.get("id");
   if (!id) return;
 
-  const product = getProductById(id);
+  let product = getProductById(id);
+
+  // If product not found and API hasn't loaded yet, wait and retry
+  if (!product && typeof productsLoadedFromApi !== "undefined" && !productsLoadedFromApi) {
+    setTimeout(() => initProductPage(), 500);
+    return;
+  }
 
   if (!product) {
-    if (typeof productsLoadedFromApi !== "undefined" && productsLoadedFromApi) {
-      if (!section.querySelector(".product-not-found-msg")) {
-        section.insertAdjacentHTML(
-          "afterbegin",
-          '<div class="container product-not-found-msg" style="padding:80px 0;text-align:center"><h2>Product not found</h2><a href="shop.html" class="btn btn-primary" style="margin-top:20px">Back to Shop</a></div>'
-        );
-      }
+    if (!section.querySelector(".product-not-found-msg")) {
+      section.insertAdjacentHTML(
+        "afterbegin",
+        '<div class="container product-not-found-msg" style="padding:80px 0;text-align:center"><h2>Product not found</h2><a href="shop.html" class="btn btn-primary" style="margin-top:20px">Back to Shop</a></div>'
+      );
     }
     return;
   }

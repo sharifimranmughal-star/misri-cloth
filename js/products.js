@@ -263,11 +263,11 @@ function renderStars(rating) {
 }
 
 function productCardHTML(product) {
-  const badgeHTML = product.badge 
-    ? `<span class="product-badge badge-${product.badge}">${product.badge}</span>` 
+  const badgeHTML = product.badge
+    ? `<span class="product-badge badge-${product.badge}">${product.badge}</span>`
     : "";
-  
-  const priceHTML = product.originalPrice 
+
+  const priceHTML = product.originalPrice
     ? `<span class="price-old">${formatPrice(product.originalPrice)}</span><span>${formatPrice(product.price)}</span>`
     : `<span>${formatPrice(product.price)}</span>`;
 
