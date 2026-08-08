@@ -219,7 +219,8 @@ function getProductsByCategory(category) {
 function getProductById(id) {
   if (id == null || id === "") return undefined;
   const numId = Number(id);
-  return PRODUCTS.find(p => Number(p.id) === numId);
+  const product = PRODUCTS.find(p => Number(p.id) === numId);
+  return product;
 }
 
 function isFabricProduct(product) {
@@ -279,9 +280,11 @@ function productCardHTML(product) {
   return `
     <div class="product-card ${product.new ? 'new' : ''} ${isOutOfStock ? 'out-of-stock' : ''}">
       ${badgeHTML}
-      <a href="product.html?id=${product.id}" class="product-image">
-        <img src="${product.image}" alt="${product.name}" loading="lazy">
-      </a>
+      <div class="product-image">
+        <a href="product.html?id=${product.id}">
+          <img src="${product.image}" alt="${product.name}" loading="lazy">
+        </a>
+      </div>
       <div class="product-info">
         <span class="product-category">${getCategoryLabel(product.category)}</span>
         <h3><a href="product.html?id=${product.id}">${product.name}</a></h3>
