@@ -19,3 +19,9 @@ services:
         fromDatabase:
           name: misri-cloth-db
           property: connectionString
+      - key: CLOUDINARY_CLOUD_NAME
+        value: hpllnetw
+      - key: CLOUDINARY_API_KEY
+        value: 562536833194365
+      - key: CLOUDINARY_API_SECRET
+        value: jtinbVE79aun4oVnxOYDXzTin74
