@@ -26,7 +26,7 @@ const ACTIVITY_FILE = path.join(DATA_DIR, "activity_logs.json");
 const NOTIFICATIONS_FILE = path.join(DATA_DIR, "notifications.json");
 
 const OWNER_EMAIL = "sharifimranm@gmail.com";
-const ADMIN_PASSWORD = "misri2026";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "misri2026";
 const DATABASE_URL = process.env.DATABASE_URL;
 const USE_DB = Boolean(DATABASE_URL);
 const dbPool = USE_DB
