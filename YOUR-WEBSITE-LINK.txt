@@ -19,7 +19,7 @@ CURRENT TEMP LINK (if tunnel is running):
   (run start-public.bat to get a new one)
 
 Admin panel:  YOUR-LINK/admin/orders.html
-Password:     misri2026
+
 
 Store address: OPP Grid Station, Talagang Road, Chakwal
 Phone: 0334-8711716 | 0315-5916343

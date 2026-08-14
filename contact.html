@@ -15,8 +15,16 @@
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="css/style.css">
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = savedTheme || (prefersDark ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
 </head>
-<body>
+<body class="contact-page">
 
   <div class="announcement-bar">
     <span>Free Shipping</span> on orders over Rs. 5,000 &nbsp;·&nbsp; Call us: <span>0334-8711716</span> | <span>0315-5916343</span>
@@ -32,6 +40,9 @@
         <a href="contact.html">Contact</a>
       </nav>
       <div class="header-actions">
+        <button class="theme-toggle" aria-label="Toggle theme">
+          <i class="fas fa-moon"></i>
+        </button>
         <button class="cart-toggle" aria-label="Open cart">
           <i class="fas fa-shopping-bag"></i>
           <span class="cart-count">0</span>
@@ -54,7 +65,7 @@
     </ul>
   </nav>
 
-  <section class="page-hero">
+  <section class="page-hero" style="background-image: url('pics/16.avif'); background-size: cover; background-position: center; background-repeat: no-repeat;">
     <div class="container">
       <h1>Contact Us</h1>
       <p>We'd love to hear from you</p>

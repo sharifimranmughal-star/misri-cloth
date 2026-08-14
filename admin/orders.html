@@ -5,20 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Dashboard — MISRI CLOTH</title>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="admin.css">
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = savedTheme || (prefersDark ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Outfit', sans-serif; background: #f5f0e8; color: #1a1210; }
-    .login-box { max-width: 360px; margin: 80px auto; background: white; padding: 32px; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); }
-    input { width: 100%; padding: 12px; margin: 8px 0 16px; border: 1px solid #e5ddd4; border-radius: 6px; font-family: inherit; }
-    button, .btn { background: #1a1210; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-family: inherit; }
-    .error { color: #8b2942; margin-bottom: 12px; }
-    .sub { color: #7a7068; margin-bottom: 24px; }
+    body { font-family: 'Outfit', sans-serif; background: var(--admin-bg); color: var(--admin-dark); }
+    .login-box { max-width: 360px; margin: 80px auto; background: var(--admin-white); padding: 32px; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); }
+    input { width: 100%; padding: 12px; margin: 8px 0 16px; border: 1px solid var(--admin-border); border-radius: 6px; font-family: inherit; background: var(--admin-white); color: var(--admin-dark); }
+    button, .btn { background: var(--admin-dark); color: var(--admin-white); border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+    .error { color: var(--admin-danger); margin-bottom: 12px; }
+    .sub { color: var(--admin-muted); margin-bottom: 24px; }
     #app { display: none; }
     .storage-badge { padding: 8px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 16px; display: inline-block; }
-    .storage-badge.ok { background: #d4edda; color: #155724; }
-    .storage-badge.warn { background: #fff3cd; color: #856404; }
-    .items-list { font-size: 0.8rem; color: #555; margin-top: 4px; }
+    .storage-badge.ok { background: var(--admin-success-bg); color: var(--admin-success); }
+    .storage-badge.warn { background: var(--admin-warn-bg); color: var(--admin-warn); }
+    .items-list { font-size: 0.8rem; color: var(--admin-muted); margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -36,6 +45,11 @@
 <div id="app" class="admin-layout">
   <aside class="admin-sidebar">
     <div class="brand">MISRI CLOTH</div>
+    <div class="theme-toggle-container">
+      <button class="admin-theme-toggle" onclick="toggleAdminTheme()" aria-label="Toggle theme">
+        <i class="fas fa-moon"></i>
+      </button>
+    </div>
     <ul class="admin-nav">
       <li><button data-section="dashboard" class="active" onclick="showSection('dashboard')">📊 Dashboard</button></li>
       <li><button data-section="products" onclick="showSection('products')">📦 Products</button></li>

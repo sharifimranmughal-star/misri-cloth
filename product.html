@@ -14,6 +14,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="css/style.css">
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = savedTheme || (prefersDark ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
 </head>
 <body>
 
@@ -23,7 +31,7 @@
 
   <header class="header">
     <div class="container">
-      <a href="index.html" class="logo">MISRI <span>CLOTH</span></a>
+      <a href="index.html" class="logo">MISRI TAILORS <span>& CLOTH</span></a>
       <nav class="nav-desktop">
         <a href="index.html">Home</a>
         <a href="shop.html">Shop</a>
@@ -31,6 +39,9 @@
         <a href="contact.html">Contact</a>
       </nav>
       <div class="header-actions">
+        <button class="theme-toggle" aria-label="Toggle theme">
+          <i class="fas fa-moon"></i>
+        </button>
         <button class="cart-toggle" aria-label="Open cart">
           <i class="fas fa-shopping-bag"></i>
           <span class="cart-count">0</span>

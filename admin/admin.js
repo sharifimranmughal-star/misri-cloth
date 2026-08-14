@@ -10,6 +10,18 @@ const CATEGORIES = [
 ];
 const LOW_STOCK_THRESHOLD = 5;
 
+function toggleAdminTheme() {
+  const currentTheme = document.documentElement.getAttribute("data-theme");
+  const newTheme = currentTheme === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", newTheme);
+  localStorage.setItem("theme", newTheme);
+  
+  const icon = document.querySelector(".admin-theme-toggle i");
+  if (icon) {
+    icon.className = newTheme === "dark" ? "fas fa-sun" : "fas fa-moon";
+  }
+}
+
 let adminPassword = sessionStorage.getItem("misri_admin_pw") || "";
 let adminName = sessionStorage.getItem("misri_admin_name") || "Admin";
 let currentSection = "dashboard";
@@ -946,6 +958,12 @@ function initModals() {
 
 /* ── Init ── */
 document.addEventListener("DOMContentLoaded", () => {
+  const currentTheme = document.documentElement.getAttribute("data-theme");
+  const icon = document.querySelector(".admin-theme-toggle i");
+  if (icon) {
+    icon.className = currentTheme === "dark" ? "fas fa-sun" : "fas fa-moon";
+  }
+  
   initModals();
   setupUploadZone();
   $("#product-form")?.addEventListener("submit", saveProductForm);

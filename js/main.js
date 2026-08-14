@@ -1,5 +1,33 @@
 
 
+function initThemeToggle() {
+  const toggle = document.querySelector(".theme-toggle");
+  if (!toggle) return;
+
+  const savedTheme = localStorage.getItem("theme");
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const initialTheme = savedTheme || (prefersDark ? "dark" : "light");
+
+  document.documentElement.setAttribute("data-theme", initialTheme);
+  updateThemeIcon(initialTheme);
+
+  toggle.addEventListener("click", () => {
+    const currentTheme = document.documentElement.getAttribute("data-theme");
+    const newTheme = currentTheme === "dark" ? "light" : "dark";
+    
+    document.documentElement.setAttribute("data-theme", newTheme);
+    localStorage.setItem("theme", newTheme);
+    updateThemeIcon(newTheme);
+  });
+
+  function updateThemeIcon(theme) {
+    const icon = toggle.querySelector("i");
+    if (icon) {
+      icon.className = theme === "dark" ? "fas fa-sun" : "fas fa-moon";
+    }
+  }
+}
+
 function initMobileNav() {
   const toggle = document.querySelector(".menu-toggle");
   const nav = document.querySelector(".mobile-nav");
@@ -379,6 +407,7 @@ async function initContactForm() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  initThemeToggle();
   initMobileNav();
   initCartDrawer();
   initScrollReveal();

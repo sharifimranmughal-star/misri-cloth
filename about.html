@@ -15,8 +15,16 @@
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="css/style.css">
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = savedTheme || (prefersDark ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
 </head>
-<body>
+<body class="about-page">
 
   <div class="announcement-bar">
     <span>Free Shipping</span> on orders over Rs. 5,000 &nbsp;·&nbsp; Call us: <span>0334-8711716</span> | <span>0315-5916343</span>
@@ -32,6 +40,9 @@
         <a href="contact.html">Contact</a>
       </nav>
       <div class="header-actions">
+        <button class="theme-toggle" aria-label="Toggle theme">
+          <i class="fas fa-moon"></i>
+        </button>
         <button class="cart-toggle" aria-label="Open cart">
           <i class="fas fa-shopping-bag"></i>
           <span class="cart-count">0</span>
@@ -54,7 +65,7 @@
     </ul>
   </nav>
 
-  <section class="page-hero">
+  <section class="page-hero" style="background-image: url('pics/stoory.PNG'); background-size: cover; background-position: center; background-repeat: no-repeat;">
     <div class="container">
       <h1>Our Story</h1>
       <p>Where heritage tailoring meets modern men's fashion</p>
@@ -70,7 +81,7 @@
     <div class="container">
       <div class="about-grid">
         <div class="about-image reveal">
-          <img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=700&q=80" alt="MISRI CLOTH craftsmanship">
+          <img src="pics/stitching.jpg" alt="MISRI CLOTH craftsmanship">
         </div>
         <div class="about-content reveal">
           <span class="section-label">Who We Are</span>

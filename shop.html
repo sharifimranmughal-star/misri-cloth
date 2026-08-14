@@ -15,8 +15,16 @@
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="css/style.css">
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = savedTheme || (prefersDark ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
 </head>
-<body>
+<body class="shop-page">
 
   <div class="announcement-bar">
     <span>Free Shipping</span> on orders over Rs. 5,000 &nbsp;·&nbsp; Call us: <span>0334-8711716</span> | <span>0315-5916343</span>
@@ -24,7 +32,7 @@
 
   <header class="header">
     <div class="container">
-      <a href="index.html" class="logo">MISRI TAILORS <span>&CLOTH</span></a>
+      <a href="index.html" class="logo">MISRI TAILORS <span>& CLOTH</span></a>
       <nav class="nav-desktop">
         <a href="index.html">Home</a>
         <a href="shop.html">Shop</a>
@@ -32,6 +40,9 @@
         <a href="contact.html">Contact</a>
       </nav>
       <div class="header-actions">
+        <button class="theme-toggle" aria-label="Toggle theme">
+          <i class="fas fa-moon"></i>
+        </button>
         <button class="cart-toggle" aria-label="Open cart">
           <i class="fas fa-shopping-bag"></i>
           <span class="cart-count">0</span>
@@ -54,7 +65,7 @@
     </ul>
   </nav>
 
-  <section class="page-hero">
+  <section class="page-hero" id="shop-hero" style="background-image: url('pics/21.png'); background-size: cover; background-position: center; background-repeat: no-repeat;">
     <div class="container">
       <h1>Men's Collection</h1>
       <p>Premium fabrics and expert tailoring for the modern gentleman</p>
@@ -65,6 +76,52 @@
       </div>
     </div>
   </section>
+
+  <!-- Category Hero Images -->
+  <div class="category-hero-images" style="display: none;">
+    <!-- ALL PRODUCTS IMAGE -->
+    <img
+        class="category-image"
+        data-category="all"
+        src="pics/21.png"
+        alt="All Products"
+    >
+    <!-- MEN'S FABRIC IMAGE -->
+    <img
+        class="category-image"
+        data-category="fabric"
+        src="pics/11.png"
+        alt="Men's Fabric"
+    >
+    <!-- SUITS IMAGE -->
+    <img
+        class="category-image"
+        data-category="suits"
+        src="pics/13.jpg"
+        alt="Suits"
+    >
+    <!-- SHALWAR KAMEEZ IMAGE -->
+    <img
+        class="category-image"
+        data-category="shalwar-kameez"
+        src="pics/12.jpg"
+        alt="Shalwar Kameez"
+    >
+    <!-- COATS IMAGE -->
+    <img
+        class="category-image"
+        data-category="coats"
+        src="pics/21.png"
+        alt="Coats"
+    >
+    <!-- WAISTCOATS IMAGE -->
+    <img
+        class="category-image"
+        data-category="waistcoats"
+        src="pics/15.png"
+        alt="Waistcoats"
+    >
+  </div>
 
   <div class="container shop-layout">
     <aside class="shop-sidebar">
@@ -267,5 +324,36 @@
   <script src="js/products.js"></script>
   <script src="js/main.js"></script>
   <script src="js/cart.js"></script>
+  <script>
+    // Category Hero Image Switching
+    document.addEventListener('DOMContentLoaded', function() {
+      const categoryRadios = document.querySelectorAll('input[name="category"]');
+      const shopHero = document.getElementById('shop-hero');
+      const categoryImages = document.querySelectorAll('.category-image');
+
+      // Function to update hero image based on selected category
+      function updateHeroImage(category) {
+        const selectedImage = document.querySelector(`.category-image[data-category="${category}"]`);
+        if (selectedImage && shopHero) {
+          shopHero.style.backgroundImage = `url('${selectedImage.src}')`;
+        }
+      }
+
+      // Add event listeners to category radio buttons
+      categoryRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+          if (this.checked) {
+            updateHeroImage(this.value);
+          }
+        });
+      });
+
+      // Set initial image based on default checked category
+      const defaultCategory = document.querySelector('input[name="category"]:checked');
+      if (defaultCategory) {
+        updateHeroImage(defaultCategory.value);
+      }
+    });
+  </script>
 </body>
 </html>
