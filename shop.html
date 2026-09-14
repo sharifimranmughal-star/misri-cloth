@@ -40,6 +40,9 @@
         <a href="contact.html">Contact</a>
       </nav>
       <div class="header-actions">
+        <button class="search-toggle" aria-label="Search products">
+          <i class="fas fa-search"></i>
+        </button>
         <button class="theme-toggle" aria-label="Toggle theme">
           <i class="fas fa-moon"></i>
         </button>
@@ -65,7 +68,19 @@
     </ul>
   </nav>
 
-  <section class="page-hero" id="shop-hero" style="background-image: url('pics/21.png'); background-size: cover; background-position: center; background-repeat: no-repeat;">
+  <!-- Search Modal -->
+  <div class="search-modal">
+    <div class="search-modal-content">
+      <button class="search-modal-close" aria-label="Close search"><i class="fas fa-times"></i></button>
+      <div class="search-container">
+        <input type="text" class="search-input" placeholder="Search products..." aria-label="Search products">
+        <button class="search-submit" aria-label="Submit search"><i class="fas fa-search"></i></button>
+      </div>
+      <div class="search-results"></div>
+    </div>
+  </div>
+
+  <section class="page-hero" id="shop-hero" style="background-image: url('pics/22.png'); background-size: cover; background-position: center; background-repeat: no-repeat;">
     <div class="container">
       <h1>Men's Collection</h1>
       <p>Premium fabrics and expert tailoring for the modern gentleman</p>
@@ -83,7 +98,7 @@
     <img
         class="category-image"
         data-category="all"
-        src="pics/21.png"
+        src="pics/22.png"
         alt="All Products"
     >
     <!-- MEN'S FABRIC IMAGE -->
@@ -97,7 +112,7 @@
     <img
         class="category-image"
         data-category="suits"
-        src="pics/13.jpg"
+        src="pics/13.png"
         alt="Suits"
     >
     <!-- SHALWAR KAMEEZ IMAGE -->
@@ -111,7 +126,7 @@
     <img
         class="category-image"
         data-category="coats"
-        src="pics/21.png"
+        src="pics/22.png"
         alt="Coats"
     >
     <!-- WAISTCOATS IMAGE -->
@@ -123,27 +138,28 @@
     >
   </div>
 
-  <div class="container shop-layout">
-    <aside class="shop-sidebar">
-      <div class="filter-group">
-        <h4>Category</h4>
-        <div class="filter-options">
-          <label><input type="radio" name="category" value="all" checked><span>All Products</span></label>
-          <label><input type="radio" name="category" value="fabric"><span>Men's Fabric</span></label>
-          <label><input type="radio" name="category" value="suits"><span>Suits</span></label>
-          <label><input type="radio" name="category" value="shalwar-kameez"><span>Shalwar Kameez</span></label>
-          <label><input type="radio" name="category" value="coats"><span>Coats</span></label>
-          <label><input type="radio" name="category" value="waistcoats"><span>Waistcoats</span></label>
-        </div>
+  <!-- Shop Filters - Category and Quick Links -->
+  <div class="container shop-filters-section">
+    <div class="filter-group">
+      <h4>Category</h4>
+      <div class="filter-options">
+        <label><input type="radio" name="category" value="all" checked><span>All Products</span></label>
+        <label><input type="radio" name="category" value="fabric"><span>Men's Fabric</span></label>
+        <label><input type="radio" name="category" value="suits"><span>Suits</span></label>
+        <label><input type="radio" name="category" value="shalwar-kameez"><span>Shalwar Kameez</span></label>
+        <label><input type="radio" name="category" value="coats"><span>Coats</span></label>
+        <label><input type="radio" name="category" value="waistcoats"><span>Waistcoats</span></label>
       </div>
-      <div class="filter-group">
-        <h4>Quick Link</h4>
-        <div class="filter-options">
-          <a href="#measurements" style="font-size:0.9rem;color:var(--color-burgundy);font-weight:500"><i class="fas fa-ruler"></i> Measurement Guide</a>
-        </div>
+    </div>
+    <div class="filter-group">
+      <h4>Quick Link</h4>
+      <div class="filter-options">
+        <a href="#measurements"><i class="fas fa-ruler"></i> Measurement Guide</a>
       </div>
-    </aside>
+    </div>
+  </div>
 
+  <div class="container shop-layout">
     <main>
       <div class="shop-toolbar">
         <span class="shop-count">Showing 12 products</span>
@@ -259,8 +275,7 @@
           <div class="social-links">
             <a href="#" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
             <a href="#" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
-            <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
-            <a href="#" aria-label="Pinterest"><i class="fab fa-pinterest-p"></i></a>
+            <a href="https://www.google.com/url?sa=t&source=web&rct=j&opi=89978449&url=/maps/place/MISRI%2BTAILORS%2BAND%2BCLOTH/data%3D!4m2!3m1!1s0x0:0xe8effe6f034c25ca%3Fsa%3DX%26ved%3D1t:2428%26hl%3Den%26ictx%3D111&ved=2ahUKEwiug5_t4u6WAxX6gf0HHa8-CcsQ_BJ6BAgREBI&usg=AOvVaw00CFaQFsiRu2irpaYt9-z1" target="_blank" aria-label="Location" class="location-btn"><i class="fas fa-map-marker-alt"></i></a>
           </div>
         </div>
         <div class="footer-col">

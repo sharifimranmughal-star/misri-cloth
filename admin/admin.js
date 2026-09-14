@@ -9,6 +9,12 @@ const CATEGORIES = [
   { value: "waistcoats", label: "Waistcoats" }
 ];
 const LOW_STOCK_THRESHOLD = 5;
+const TAILORING_LABELS = {
+  "shalwar-kameez": "Shalwar Qameez",
+  suits: "Suit",
+  "prince-coat": "Prince Coat",
+  waistcoats: "Waistcoat"
+};
 
 function toggleAdminTheme() {
   const currentTheme = document.documentElement.getAttribute("data-theme");
@@ -158,7 +164,8 @@ function showSection(name) {
     customers: "Customers",
     reports: "Reports",
     activity: "Activity Log",
-    messages: "Messages"
+    messages: "Messages",
+    tailoring: "Tailoring"
   };
   const titleEl = $("#page-title");
   if (titleEl) titleEl.textContent = titles[name] || "Dashboard";
@@ -173,7 +180,8 @@ function showSection(name) {
     customers: loadCustomers,
     reports: loadReports,
     activity: loadActivity,
-    messages: loadMessages
+    messages: loadMessages,
+    tailoring: loadTailoringSection
   };
   loaders[name]?.();
 }
@@ -313,6 +321,33 @@ async function loadProducts() {
   showLoading(false);
 }
 
+function renderProductStockCell(p) {
+  const colors = Array.isArray(p.colors) ? p.colors.filter(Boolean) : [];
+  const colorStock = p.colorStock || {};
+
+  if (colors.length) {
+    return colors.map((color) => {
+      const stock = colorStock[color] != null ? Number(colorStock[color]) || 0 : 0;
+      const stockClass = stock <= 0 ? "stock-out" : stock <= LOW_STOCK_THRESHOLD ? "stock-low" : "";
+      const colorArg = JSON.stringify(color);
+      return `<div class="stock-control color-stock-control ${stockClass}">
+        <span class="color-stock-label">${esc(color)}</span>
+        <button onclick='adjustStock(${p.id}, -1, ${colorArg})'>−</button>
+        <span>${stock}</span>
+        <button onclick='adjustStock(${p.id}, 1, ${colorArg})'>+</button>
+      </div>`;
+    }).join("");
+  }
+
+  const stockClass = p.stockQuantity <= 0 ? "stock-out" : p.stockQuantity <= LOW_STOCK_THRESHOLD ? "stock-low" : "";
+  const stockWarning = p.stockQuantity <= LOW_STOCK_THRESHOLD && p.stockQuantity > 0 ? `⚠️` : "";
+  return `<div class="stock-control ${stockClass}">
+    <button onclick="adjustStock(${p.id}, -1)">−</button>
+    <span>${p.stockQuantity}${stockWarning}</span>
+    <button onclick="adjustStock(${p.id}, 1)">+</button>
+  </div>`;
+}
+
 function renderProductsTable(products) {
   if (!products.length) {
     $("#products-table").innerHTML = `<p class="empty-state">No products yet. Add your first product.</p>`;
@@ -320,19 +355,13 @@ function renderProductsTable(products) {
   }
   const rows = products.map((p) => {
     const stockClass = p.stockQuantity <= 0 ? "stock-out" : p.stockQuantity <= LOW_STOCK_THRESHOLD ? "stock-low" : "";
-    const stockWarning = p.stockQuantity <= LOW_STOCK_THRESHOLD && p.stockQuantity > 0 ? `⚠️` : "";
     return `<tr>
       <td><img src="${esc(p.image)}" class="product-thumb" alt=""></td>
       <td><strong>${esc(p.name)}</strong><br><small>${esc(p.sku || "—")}</small></td>
       <td>${esc(p.category)}</td>
+      <td>${p.category === "fabric" && p.stitchingEnabled ? `<span class="tailoring-badge">✂️ ${(p.stitchingTypes || []).map((id) => TAILORING_LABELS[id] || id).join(", ") || "On"}</span>` : (p.category === "fabric" ? "—" : "")}</td>
       <td>${fmtMoney(p.price)}</td>
-      <td class="${stockClass}">
-        <div class="stock-control">
-          <button onclick="adjustStock(${p.id}, -1)">−</button>
-          <span>${p.stockQuantity}${stockWarning}</span>
-          <button onclick="adjustStock(${p.id}, 1)">+</button>
-        </div>
-      </td>
+      <td class="${stockClass}">${renderProductStockCell(p)}</td>
       <td>${statusBadge(p.status)} ${p.isVisible ? "" : '<span class="status-badge status-inactive">Hidden</span>'}</td>
       <td>${p.featured ? "★" : "—"}</td>
       <td>
@@ -347,19 +376,23 @@ function renderProductsTable(products) {
   }).join("");
   $("#products-table").innerHTML = `
     <div class="admin-table-wrap"><table class="admin-table">
-      <thead><tr><th>Image</th><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Featured</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Image</th><th>Product</th><th>Category</th><th>Stitching</th><th>Price</th><th>Stock</th><th>Status</th><th>Featured</th><th>Actions</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
 }
 
-async function adjustStock(productId, delta) {
+async function adjustStock(productId, delta, color = null) {
   try {
+    const payload = { delta, adminName, reason: "Manual stock adjustment from admin panel" };
+    if (color) payload.color = color;
+
     const data = await apiFetch(`/api/admin/products/${productId}/stock`, {
       method: "POST",
-      body: JSON.stringify({ delta, adminName, reason: "Manual stock adjustment from admin panel" })
+      body: JSON.stringify(payload)
     });
     if (data.success) {
-      showToast(`Stock updated: ${delta > 0 ? '+' : ''}${delta} units`);
+      const label = color ? `${color}: ` : "";
+      showToast(`Stock updated: ${label}${delta > 0 ? "+" : ""}${delta}`);
       loadProducts();
     } else {
       showToast(data.message, "error");
@@ -367,6 +400,108 @@ async function adjustStock(productId, delta) {
   } catch (err) {
     showToast(err.message, "error");
   }
+}
+
+function getColorStockRowsData() {
+  return Array.from($("#color-stock-rows")?.querySelectorAll(".color-stock-row") || []).map((row) => ({
+    color: row.querySelector(".color-name")?.value.trim() || "",
+    stock: Math.max(0, Number(row.querySelector(".color-stock")?.value) || 0)
+  })).filter((row) => row.color);
+}
+
+function updateTotalStockField() {
+  const colorRows = getColorStockRowsData();
+  const stockInput = $("#pf-stock");
+  if (!stockInput) return;
+
+  if (colorRows.length) {
+    stockInput.readOnly = true;
+    stockInput.title = "Calculated from color stocks";
+    stockInput.value = colorRows.reduce((sum, row) => sum + row.stock, 0);
+  } else {
+    stockInput.readOnly = false;
+    stockInput.title = "";
+  }
+}
+
+function renderColorStockRows(product = null) {
+  const container = $("#color-stock-rows");
+  if (!container) return;
+
+  const colors = product?.colors || [];
+  const colorStock = product?.colorStock || {};
+  let rows = colors.map((color) => ({
+    color,
+    stock: colorStock[color] != null ? Number(colorStock[color]) || 0 : 0
+  }));
+
+  if (!rows.length) {
+    container.innerHTML = '<p class="field-hint">Add colors to track stock per color. Products without colors use total stock only.</p>';
+    const stockInput = $("#pf-stock");
+    if (stockInput) {
+      stockInput.readOnly = false;
+      stockInput.value = product?.stockQuantity ?? 0;
+    }
+    return;
+  }
+
+  container.innerHTML = rows.map((row, index) => `
+    <div class="color-stock-row" data-index="${index}">
+      <input type="text" class="color-name" placeholder="Color name" value="${esc(row.color)}">
+      <input type="number" class="color-stock" min="0" placeholder="Stock" value="${row.stock}">
+      <button type="button" class="remove-color-row" aria-label="Remove color">×</button>
+    </div>
+  `).join("");
+
+  container.querySelectorAll(".color-name, .color-stock").forEach((input) => {
+    input.addEventListener("input", updateTotalStockField);
+  });
+  container.querySelectorAll(".remove-color-row").forEach((button) => {
+    button.addEventListener("click", () => {
+      button.closest(".color-stock-row")?.remove();
+      if (!container.querySelector(".color-stock-row")) {
+        container.innerHTML = '<p class="field-hint">Add colors to track stock per color. Products without colors use total stock only.</p>';
+      }
+      updateTotalStockField();
+    });
+  });
+
+  updateTotalStockField();
+}
+
+function addColorStockRow(color = "", stock = 0) {
+  const container = $("#color-stock-rows");
+  if (!container) return;
+
+  if (container.querySelector(".field-hint")) {
+    container.innerHTML = "";
+  }
+
+  const row = document.createElement("div");
+  row.className = "color-stock-row";
+  row.innerHTML = `
+    <input type="text" class="color-name" placeholder="Color name" value="${esc(color)}">
+    <input type="number" class="color-stock" min="0" placeholder="Stock" value="${stock}">
+    <button type="button" class="remove-color-row" aria-label="Remove color">×</button>
+  `;
+
+  row.querySelectorAll(".color-name, .color-stock").forEach((input) => {
+    input.addEventListener("input", updateTotalStockField);
+  });
+  row.querySelector(".remove-color-row")?.addEventListener("click", () => {
+    row.remove();
+    if (!container.querySelector(".color-stock-row")) {
+      container.innerHTML = '<p class="field-hint">Add colors to track stock per color. Products without colors use total stock only.</p>';
+    }
+    updateTotalStockField();
+  });
+
+  container.appendChild(row);
+  updateTotalStockField();
+}
+
+function setupColorStockRows() {
+  $("#add-color-row")?.addEventListener("click", () => addColorStockRow());
 }
 
 function openProductModal(product = null) {
@@ -387,13 +522,73 @@ function openProductModal(product = null) {
   $("#pf-rating").value = product?.rating ?? 4.5;
   $("#pf-reviews").value = product?.reviews ?? 0;
   $("#pf-sizes").value = (product?.sizes || ["Custom Measurement"]).join(", ");
-  $("#pf-colors").value = (product?.colors || []).join(", ");
+  renderColorStockRows(product);
   $("#pf-ref-meters").value = product?.referenceMeters || "";
   $("#pf-featured").checked = Boolean(product?.featured);
   $("#pf-new").checked = Boolean(product?.new);
   $("#pf-visible").checked = product ? product.isVisible !== false : true;
+  renderProductStitchingFields(product);
   renderImagePreviews();
   $("#product-modal").classList.add("open");
+}
+
+function getTailoringTypeOptions() {
+  if (tailoringTypes.length) return tailoringTypes;
+  return Object.entries(TAILORING_LABELS).map(([id, label]) => ({ id, label }));
+}
+
+function selectedStitchingTypesFrom(container) {
+  return Array.from(container?.querySelectorAll("input[data-stitch-type]:checked") || []).map((el) => el.value);
+}
+
+function renderStitchingTypeChecks(container, selectedIds, enabled) {
+  if (!container) return;
+  const selected = new Set(selectedIds || []);
+  const types = getTailoringTypeOptions();
+  container.innerHTML = types.map((type) => `
+    <label class="form-check stitching-type-check">
+      <input type="checkbox" data-stitch-type value="${esc(type.id)}" ${selected.has(type.id) ? "checked" : ""} ${enabled ? "" : "disabled"}>
+      ${esc(type.label)}
+    </label>
+  `).join("");
+}
+
+function renderProductStitchingFields(product = null) {
+  const wrap = $("#pf-stitching-wrap");
+  const checkbox = $("#pf-stitching");
+  const typesBox = $("#pf-stitching-types");
+  const category = $("#pf-category")?.value || product?.category || "fabric";
+  const isFabric = category === "fabric";
+
+  if (wrap) wrap.hidden = !isFabric;
+  if (!isFabric) return;
+
+  const enabled = product
+    ? Boolean(product.stitchingEnabled)
+    : true;
+  const types = product?.stitchingTypes?.length
+    ? product.stitchingTypes
+    : getTailoringTypeOptions().map((type) => type.id);
+
+  if (checkbox) checkbox.checked = enabled;
+  renderStitchingTypeChecks(typesBox, types, enabled);
+}
+
+function toggleProductStitchingTypes() {
+  const enabled = Boolean($("#pf-stitching")?.checked);
+  $$("#pf-stitching-types input[data-stitch-type]").forEach((input) => {
+    input.disabled = !enabled;
+  });
+}
+
+function getProductFormStitching() {
+  const isFabric = $("#pf-category")?.value === "fabric";
+  if (!isFabric) {
+    return { stitchingEnabled: false, stitchingTypes: [] };
+  }
+  const stitchingEnabled = Boolean($("#pf-stitching")?.checked);
+  const stitchingTypes = selectedStitchingTypesFrom($("#pf-stitching-types"));
+  return { stitchingEnabled, stitchingTypes };
 }
 
 function renderImagePreviews() {
@@ -445,6 +640,21 @@ function setupUploadZone() {
 async function saveProductForm(e) {
   e.preventDefault();
   const id = $("#product-form").dataset.id;
+  const colorRows = getColorStockRowsData();
+  let colors = [];
+  let colorStock = {};
+  let stockQuantity = 0;
+
+  if (colorRows.length) {
+    colors = colorRows.map((row) => row.color);
+    colorRows.forEach((row) => {
+      colorStock[row.color] = row.stock;
+    });
+    stockQuantity = colorRows.reduce((sum, row) => sum + row.stock, 0);
+  } else {
+    stockQuantity = Math.max(0, Number($("#pf-stock").value) || 0);
+  }
+
   const payload = {
     name: $("#pf-name").value.trim(),
     description: $("#pf-desc").value.trim(),
@@ -452,23 +662,30 @@ async function saveProductForm(e) {
     originalPrice: $("#pf-original").value ? Number($("#pf-original").value) : null,
     category: $("#pf-category").value,
     sku: $("#pf-sku").value.trim(),
-    stockQuantity: Number($("#pf-stock").value),
+    stockQuantity,
+    colorStock,
     status: $("#pf-status").value,
     badge: $("#pf-badge").value || null,
     rating: Number($("#pf-rating").value),
     reviews: Number($("#pf-reviews").value),
     sizes: $("#pf-sizes").value.split(",").map((s) => s.trim()).filter(Boolean),
-    colors: $("#pf-colors").value.split(",").map((s) => s.trim()).filter(Boolean),
+    colors,
     referenceMeters: $("#pf-ref-meters").value ? Number($("#pf-ref-meters").value) : null,
     featured: $("#pf-featured").checked,
     new: $("#pf-new").checked,
     isVisible: $("#pf-visible").checked,
     image: productImages[0] || "",
-    images: productImages
+    images: productImages,
+    ...getProductFormStitching()
   };
 
   if (!payload.name || !payload.price) {
     showToast("Name and price are required", "error");
+    return;
+  }
+
+  if (payload.category === "fabric" && payload.stitchingEnabled && !payload.stitchingTypes.length) {
+    showToast("Select at least one stitching type (Shalwar Qameez, Suit, Prince Coat, or Waistcoat)", "error");
     return;
   }
 
@@ -693,6 +910,9 @@ async function viewOrderDetails(orderId) {
       const sizeBadge = item.size ? `<span class="size-badge">${esc(item.size)}</span>` : '';
       const quantityInfo = item.meters ? `${item.meters}m × ${item.quantity || 1}` : `×${item.quantity}`;
       const itemImage = item.image || 'https://via.placeholder.com/60?text=No+Image';
+      const tailoringBadge = item.tailoring_enabled && item.tailoring_type
+        ? `<span class="tailoring-badge">✂️ ${esc(TAILORING_LABELS[item.tailoring_type] || item.tailoring_type)} (+${fmtMoney(item.tailoring_charge || 0)})</span>`
+        : '';
       
       return `
         <div class="order-item-row">
@@ -703,6 +923,7 @@ async function viewOrderDetails(orderId) {
               ${colorBadge}
               ${sizeBadge}
               <span class="quantity-badge">${quantityInfo}</span>
+              ${tailoringBadge}
             </div>
             <div class="order-item-price">${fmtMoney(item.unit_price)} each</div>
           </div>
@@ -956,6 +1177,153 @@ function initModals() {
   });
 }
 
+/* ── Tailoring Charges ── */
+let tailoringTypes = [];
+
+async function loadTailoringSection() {
+  showLoading(true);
+  try {
+    const [chargeData, productData] = await Promise.all([
+      apiFetch("/api/admin/tailoring-charges"),
+      apiFetch("/api/admin/products")
+    ]);
+    tailoringTypes = chargeData.types || [];
+    const charges = chargeData.charges || {};
+    const form = $("#tailoring-charges-form");
+    if (form) {
+      form.innerHTML = tailoringTypes.map((type) => `
+        <div class="form-row tailoring-charge-row">
+          <label for="charge-${esc(type.id)}">${esc(type.label)}</label>
+          <div class="input-with-prefix">
+            <span>Rs.</span>
+            <input type="number" id="charge-${esc(type.id)}" min="0" step="100" value="${Number(charges[type.id] || 0)}">
+          </div>
+        </div>
+      `).join("");
+    }
+    renderProductStitchingTable(productData.products || []);
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+  showLoading(false);
+}
+
+function renderProductStitchingTable(products) {
+  const host = $("#product-stitching-table");
+  if (!host) return;
+
+  const fabrics = products.filter((p) => p.category === "fabric");
+  if (!fabrics.length) {
+    host.innerHTML = `<p class="empty-state">No fabric products yet. Add a Men's Fabric product first.</p>`;
+    return;
+  }
+
+  const types = getTailoringTypeOptions();
+  const rows = fabrics.map((p) => {
+    const enabled = Boolean(p.stitchingEnabled);
+    const selected = new Set(p.stitchingTypes || []);
+    const typeCells = types.map((type) => `
+      <td>
+        <label class="form-check stitching-type-check">
+          <input type="checkbox" data-stitch-type="${esc(type.id)}" ${selected.has(type.id) ? "checked" : ""} ${enabled ? "" : "disabled"}>
+          ${esc(type.label)}
+        </label>
+      </td>
+    `).join("");
+    return `<tr data-product-id="${p.id}">
+      <td>
+        <strong>${esc(p.name)}</strong><br>
+        <small>${esc(p.sku || "—")}</small>
+      </td>
+      <td>
+        <label class="form-check">
+          <input type="checkbox" class="stitching-enabled" ${enabled ? "checked" : ""}>
+          Offer stitching
+        </label>
+      </td>
+      ${typeCells}
+    </tr>`;
+  }).join("");
+
+  host.innerHTML = `
+    <div class="admin-table-wrap">
+      <table class="admin-table product-stitching-table">
+        <thead>
+          <tr>
+            <th>Fabric</th>
+            <th>Custom Stitching</th>
+            ${types.map((type) => `<th>${esc(type.label)}</th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  host.querySelectorAll(".stitching-enabled").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const row = checkbox.closest("tr");
+      row.querySelectorAll("input[data-stitch-type]").forEach((input) => {
+        input.disabled = !checkbox.checked;
+        if (checkbox.checked && !row.querySelector("input[data-stitch-type]:checked")) {
+          input.checked = true;
+        }
+      });
+    });
+  });
+}
+
+async function saveProductStitching() {
+  const rows = Array.from($$("#product-stitching-table tbody tr"));
+  const items = rows.map((row) => {
+    const stitchingEnabled = Boolean(row.querySelector(".stitching-enabled")?.checked);
+    const stitchingTypes = selectedStitchingTypesFrom(row);
+    return {
+      id: Number(row.dataset.productId),
+      stitchingEnabled,
+      stitchingTypes
+    };
+  });
+
+  const missingTypes = items.find((item) => item.stitchingEnabled && !item.stitchingTypes.length);
+  if (missingTypes) {
+    showToast("Turn stitching on only if you pick at least one type for that fabric", "error");
+    return;
+  }
+
+  showLoading(true);
+  try {
+    await apiFetch("/api/admin/product-stitching", {
+      method: "PUT",
+      body: JSON.stringify({ items, adminName })
+    });
+    showToast("Stitching options saved", "success");
+    await loadTailoringSection();
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+  showLoading(false);
+}
+
+async function saveTailoringCharges() {
+  const charges = {};
+  tailoringTypes.forEach((type) => {
+    const input = document.getElementById(`charge-${type.id}`);
+    charges[type.id] = Number(input?.value || 0);
+  });
+
+  showLoading(true);
+  try {
+    await apiFetch("/api/admin/tailoring-charges", {
+      method: "PUT",
+      body: JSON.stringify({ charges, adminName })
+    });
+    showToast("Tailoring charges saved", "success");
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+  showLoading(false);
+}
+
 /* ── Init ── */
 document.addEventListener("DOMContentLoaded", () => {
   const currentTheme = document.documentElement.getAttribute("data-theme");
@@ -966,7 +1334,16 @@ document.addEventListener("DOMContentLoaded", () => {
   
   initModals();
   setupUploadZone();
+  setupColorStockRows();
   $("#product-form")?.addEventListener("submit", saveProductForm);
+  $("#pf-category")?.addEventListener("change", () => {
+    renderProductStitchingFields({
+      category: $("#pf-category").value,
+      stitchingEnabled: Boolean($("#pf-stitching")?.checked),
+      stitchingTypes: selectedStitchingTypesFrom($("#pf-stitching-types"))
+    });
+  });
+  $("#pf-stitching")?.addEventListener("change", toggleProductStitchingTypes);
 
   CATEGORIES.forEach((c) => {
     $("#pf-category")?.insertAdjacentHTML("beforeend", `<option value="${c.value}">${c.label}</option>`);

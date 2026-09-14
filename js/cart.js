@@ -19,23 +19,33 @@ function saveCart(cart) {
   document.dispatchEvent(new CustomEvent("cartUpdated"));
 }
 
-function buildCartKey(productId, size, color) {
-  return `${productId}-${size}-${color}`;
+function buildCartKey(productId, size, color, tailoringType = null) {
+  return `${productId}-${size}-${color}-${tailoringType || "none"}`;
 }
 
-function addToCart(productId, size, color, qty = 1) {
+function addToCart(productId, size, color, qty = 1, tailoring = {}) {
   const product = getProductById(productId);
   if (!product) return;
 
-  if (isOutOfStock(product)) {
-    showToast("This product is out of stock");
+  const selectedSize = size || product.sizes[0];
+  const selectedColor = color || product.colors[0];
+
+  if (isOutOfStock(product, selectedColor)) {
+    showToast(selectedColor ? `${selectedColor} is out of stock` : "This product is out of stock");
     return;
   }
 
-  const selectedSize = size || product.sizes[0];
-  const selectedColor = color || product.colors[0];
+  const tailoringEnabled = Boolean(tailoring.enabled);
+  const allowedTypes = getProductStitchingTypes(product);
+  if (tailoringEnabled && (!allowedTypes.length || !allowedTypes.includes(tailoring.type))) {
+    showToast("Custom stitching is not available for this fabric");
+    return;
+  }
+  const tailoringType = tailoringEnabled ? (tailoring.type || null) : null;
+  const tailoringCharge = tailoringEnabled ? Number(tailoring.charge || getTailoringCharge(tailoringType)) : 0;
+
   const cart = getCart();
-  const key = buildCartKey(productId, selectedSize, selectedColor);
+  const key = buildCartKey(productId, selectedSize, selectedColor, tailoringType);
   const existing = cart.find(item => item.key === key);
 
   console.log('Adding to cart:', { productId, productName: product.name, productPrice: product.price, selectedSize, selectedColor });
@@ -46,6 +56,12 @@ function addToCart(productId, size, color, qty = 1) {
       showToast("Minimum fabric order is 4 meters");
       return;
     }
+    const needed = Math.ceil(meters);
+    const available = getColorStock(product, selectedColor);
+    if (available < needed) {
+      showToast(`Only ${available} available for ${selectedColor}`);
+      return;
+    }
     const unitPrice = getPerMeterPrice(product);
     console.log('Fabric unit price:', unitPrice);
 
@@ -53,6 +69,9 @@ function addToCart(productId, size, color, qty = 1) {
       existing.meters = meters;
       existing.size = selectedSize;
       existing.unitPrice = Number(unitPrice) || 0;
+      existing.tailoringEnabled = tailoringEnabled;
+      existing.tailoringType = tailoringType;
+      existing.tailoringCharge = tailoringCharge;
     } else {
       cart.push({
         key,
@@ -64,17 +83,33 @@ function addToCart(productId, size, color, qty = 1) {
         isFabric: true,
         meters,
         unitPrice: Number(unitPrice) || 0,
-        qty: 1
+        qty: 1,
+        tailoringEnabled,
+        tailoringType,
+        tailoringCharge
       });
     }
+    const totalLabel = formatPrice(getLineTotal(cart.find(i => i.key === key)));
+    const stitchLabel = tailoringEnabled ? ` + ${getTailoringLabel(tailoringType)} stitching` : "";
     saveCart(cart);
-    showToast(`${product.name} — ${meters}m added (${formatPrice(getFabricLineTotal(product, meters))})`);
+    showToast(`${product.name} — ${meters}m${stitchLabel} added (${totalLabel})`);
     return;
   }
 
   if (existing) {
-    existing.qty += qty;
+    const newQty = existing.qty + qty;
+    const available = getColorStock(product, selectedColor);
+    if (newQty > available) {
+      showToast(`Only ${available} available for ${selectedColor}`);
+      return;
+    }
+    existing.qty = newQty;
   } else {
+    const available = getColorStock(product, selectedColor);
+    if (qty > available) {
+      showToast(`Only ${available} available for ${selectedColor}`);
+      return;
+    }
     const cartItem = {
       key,
       id: product.id,
@@ -84,7 +119,10 @@ function addToCart(productId, size, color, qty = 1) {
       color: selectedColor,
       isFabric: false,
       unitPrice: Number(product.price) || 0,
-      qty
+      qty,
+      tailoringEnabled,
+      tailoringType,
+      tailoringCharge
     };
     console.log('Cart item being added:', cartItem);
     cart.push(cartItem);
@@ -106,6 +144,14 @@ function updateFabricMeters(key, meters) {
   const cart = getCart();
   const item = cart.find(i => i.key === key);
   if (!item || !item.isFabric) return;
+  const product = getProductById(item.id);
+  if (product) {
+    const available = getColorStock(product, item.color);
+    if (Math.ceil(meters) > available) {
+      showToast(`Only ${available} available for ${item.color}`);
+      return;
+    }
+  }
   item.meters = meters;
   item.size = `${meters} Meter`;
   saveCart(cart);
@@ -118,6 +164,14 @@ function updateCartQty(key, qty) {
   if (qty <= 0) {
     removeFromCart(key);
     return;
+  }
+  const product = getProductById(item.id);
+  if (product) {
+    const available = getColorStock(product, item.color);
+    if (qty > available) {
+      showToast(`Only ${available} available for ${item.color}`);
+      return;
+    }
   }
   item.qty = qty;
   saveCart(cart);
@@ -227,9 +281,12 @@ function renderCartDrawer() {
   itemsEl.innerHTML = cart.map(item => {
     const lineTotal = getLineTotal(item);
     console.log('Cart item:', { name: item.name, unitPrice: item.unitPrice, lineTotal });
+    const tailoringLine = item.tailoringEnabled && item.tailoringType
+      ? `<br><small class="cart-tailoring-note"><i class="fas fa-cut"></i> Custom ${getTailoringLabel(item.tailoringType)} stitching (+${formatPrice(item.tailoringCharge || 0)})</small>`
+      : "";
     const detailLine = item.isFabric
-      ? `${item.meters} meter${item.meters > 1 ? "s" : ""} · ${item.color} · ${formatPrice(item.unitPrice)}/m`
-      : `${item.size} · ${item.color}`;
+      ? `${item.meters} meter${item.meters > 1 ? "s" : ""} · ${item.color} · ${formatPrice(item.unitPrice)}/m${tailoringLine}`
+      : `${item.size} · ${item.color}${tailoringLine}`;
 
     const qtyControls = item.isFabric
       ? `<div class="qty-control">
@@ -450,7 +507,10 @@ async function submitOrder(e) {
       meters: item.isFabric ? item.meters : null,
       unit_price: item.unitPrice,
       quantity: item.isFabric ? 1 : item.qty,
-      line_total: getLineTotal(item)
+      line_total: getLineTotal(item),
+      tailoring_enabled: Boolean(item.tailoringEnabled),
+      tailoring_type: item.tailoringType || null,
+      tailoring_charge: Number(item.tailoringCharge || 0)
     }))
   };
 

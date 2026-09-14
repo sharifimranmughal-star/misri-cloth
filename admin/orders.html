@@ -58,6 +58,7 @@
       <li><button data-section="reports" onclick="showSection('reports')">📈 Reports</button></li>
       <li><button data-section="activity" onclick="showSection('activity')">📋 Activity Log</button></li>
       <li><button data-section="messages" onclick="showSection('messages')">✉️ Messages</button></li>
+      <li><button data-section="tailoring" onclick="showSection('tailoring')">✂️ Tailoring</button></li>
     </ul>
   </aside>
 
@@ -179,6 +180,26 @@
         <div id="messages-list"></div>
       </div>
     </section>
+
+    <!-- Tailoring -->
+    <section id="section-tailoring" class="admin-section">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Custom Tailoring Charges</h2>
+          <button class="btn-sm btn-primary-sm" onclick="saveTailoringCharges()">Save Charges</button>
+        </div>
+        <p class="sub" style="margin-bottom:16px">Set extra stitching charges for each garment type. Customers see these prices on fabric product pages.</p>
+        <div id="tailoring-charges-form" class="tailoring-charges-form"></div>
+      </div>
+      <div class="panel" style="margin-top:20px">
+        <div class="panel-header">
+          <h2>Stitching by Fabric</h2>
+          <button class="btn-sm btn-primary-sm" onclick="saveProductStitching()">Save Stitching Options</button>
+        </div>
+        <p class="sub" style="margin-bottom:16px">Turn stitching on for each fabric and choose which garment types customers can select (Shalwar Qameez, Suit, Prince Coat, Waistcoat).</p>
+        <div id="product-stitching-table"></div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -195,18 +216,28 @@
         <div class="form-group"><label>Original Price</label><input id="pf-original" type="number" min="0"></div>
         <div class="form-group"><label>Category</label><select id="pf-category"></select></div>
         <div class="form-group"><label>SKU</label><input id="pf-sku" placeholder="Optional"></div>
-        <div class="form-group"><label>Stock Quantity</label><input id="pf-stock" type="number" min="0" value="0"></div>
+        <div class="form-group"><label>Total Stock</label><input id="pf-stock" type="number" min="0" value="0"></div>
         <div class="form-group"><label>Status</label><select id="pf-status"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
         <div class="form-group"><label>Badge</label><select id="pf-badge"><option value="">None</option><option value="sale">Sale</option><option value="new">New</option><option value="bestseller">Best Seller</option><option value="premium">Premium</option></select></div>
         <div class="form-group"><label>Rating</label><input id="pf-rating" type="number" min="0" max="5" step="0.1" value="4.5"></div>
         <div class="form-group"><label>Reviews Count</label><input id="pf-reviews" type="number" min="0" value="0"></div>
         <div class="form-group"><label>Sizes (comma-separated)</label><input id="pf-sizes" placeholder="Custom Measurement"></div>
-        <div class="form-group"><label>Colors (comma-separated)</label><input id="pf-colors" placeholder="Navy, Black"></div>
+        <div class="form-group full">
+          <label>Colors &amp; Stock</label>
+          <div id="color-stock-rows" class="color-stock-rows"></div>
+          <button type="button" class="btn-sm btn-outline-sm" id="add-color-row" style="margin-top:8px">+ Add Color</button>
+          <small class="field-hint">Total stock is calculated automatically from all color stocks.</small>
+        </div>
         <div class="form-group"><label>Reference Meters (fabric)</label><input id="pf-ref-meters" type="number" min="0" step="0.5" placeholder="4"></div>
         <div class="form-group full">
           <label class="form-check"><input id="pf-featured" type="checkbox"> Featured Product</label>
           <label class="form-check"><input id="pf-new" type="checkbox"> Mark as New</label>
           <label class="form-check"><input id="pf-visible" type="checkbox" checked> Visible on Store</label>
+        </div>
+        <div class="form-group full" id="pf-stitching-wrap">
+          <label class="form-check"><input id="pf-stitching" type="checkbox"> Offer custom stitching on this fabric</label>
+          <p class="field-hint">Customers can add stitching when buying this cloth and pick from the types you enable below.</p>
+          <div id="pf-stitching-types" class="stitching-type-checks"></div>
         </div>
         <div class="form-group full">
           <label>Product Images</label>

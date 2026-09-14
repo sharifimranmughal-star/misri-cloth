@@ -104,10 +104,20 @@ function initShopPage() {
   const grid = document.querySelector("#shop-products");
   if (!grid) return;
 
-  let filters = { category: "all", sort: "featured" };
+  let filters = { category: "all", sort: "featured", search: "" };
 
   function render() {
     let items = getProductsByCategory(filters.category);
+
+    // Apply search filter
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      items = items.filter(product =>
+        product.name.toLowerCase().includes(searchLower) ||
+        product.description.toLowerCase().includes(searchLower) ||
+        product.category.toLowerCase().includes(searchLower)
+      );
+    }
 
     switch (filters.sort) {
       case "price-low":
@@ -146,12 +156,18 @@ function initShopPage() {
 
   const params = new URLSearchParams(window.location.search);
   const cat = params.get("category");
+  const searchQuery = params.get("search");
+  
   if (cat) {
     const input = document.querySelector(`input[name="category"][value="${cat}"]`);
     if (input) {
       input.checked = true;
       filters.category = cat;
     }
+  }
+
+  if (searchQuery) {
+    filters.search = searchQuery;
   }
 
   render();
@@ -210,9 +226,18 @@ function initProductPage() {
 
     thumbs.addEventListener("click", e => {
       if (e.target.tagName !== "IMG") return;
-      mainImg.src = e.target.src;
-      thumbs.querySelectorAll("img").forEach(img => img.classList.remove("active"));
-      e.target.classList.add("active");
+      const index = Number(e.target.dataset.index);
+      activateImage(index);
+      const mappedColor = getColorForImageIndex(product, index);
+      if (mappedColor) selectColor(mappedColor, false);
+    });
+  }
+
+  function activateImage(index) {
+    if (!mainImg || !product.images[index]) return;
+    mainImg.src = product.images[index];
+    thumbs?.querySelectorAll("img").forEach((img, i) => {
+      img.classList.toggle("active", i === index);
     });
   }
 
@@ -221,16 +246,29 @@ function initProductPage() {
   if (rating) rating.innerHTML = `${renderStars(product.rating)} <span>${product.rating} (${product.reviews} reviews)</span>`;
 
   const isFabric = isFabricProduct(product);
+  const allowedStitchingTypes = getProductStitchingTypes(product);
+  const offersStitching = allowedStitchingTypes.length > 0;
   let selectedMeters = isFabric ? parseMetersFromSize(product.sizes[0]) : 1;
+
+  let wantsStitching = false;
+  let selectedTailoringType = allowedStitchingTypes[0] || TAILORING_TYPES[0]?.id || "shalwar-kameez";
+
+  function getTailoringExtra() {
+    return wantsStitching ? getTailoringCharge(selectedTailoringType) : 0;
+  }
 
   function updatePriceDisplay() {
     if (!price) return;
     if (isFabric) {
       const perMeter = getPerMeterPrice(product);
-      const total = getFabricLineTotal(product, selectedMeters);
+      const fabricTotal = getFabricLineTotal(product, selectedMeters);
+      const stitchingExtra = getTailoringExtra();
+      const grandTotal = fabricTotal + stitchingExtra;
       price.innerHTML = `
         <span class="price-current">${formatPrice(perMeter)}/meter</span>
-        <span class="fabric-total-label">Total (${selectedMeters}m): <strong>${formatPrice(total)}</strong></span>
+        <span class="fabric-total-label">Fabric (${selectedMeters}m): <strong>${formatPrice(fabricTotal)}</strong></span>
+        ${stitchingExtra ? `<span class="fabric-tailoring-label">Stitching: <strong>+${formatPrice(stitchingExtra)}</strong></span>` : ""}
+        <span class="fabric-grand-total">Total: <strong>${formatPrice(grandTotal)}</strong></span>
       `;
     } else if (product.originalPrice) {
       price.innerHTML = `<span class="price-old">${formatPrice(product.originalPrice)}</span><span>${formatPrice(product.price)}</span>`;
@@ -245,6 +283,34 @@ function initProductPage() {
   let selectedSize = product.sizes[0];
   let selectedColor = product.colors[0];
   let qty = 1;
+
+  function getMaxQtyForSelectedColor() {
+    return getColorStock(product, selectedColor);
+  }
+
+  function updateQtyDisplay() {
+    if (qtyEl) qtyEl.textContent = qty;
+  }
+
+  function updateStockAndQtyLimits() {
+    const maxQty = getMaxQtyForSelectedColor();
+    if (!isFabric && qty > maxQty) {
+      qty = Math.max(1, maxQty);
+      updateQtyDisplay();
+    }
+    updateProductDetailStock(id, selectedColor);
+  }
+
+  function selectColor(color, syncImage = true) {
+    selectedColor = color;
+    colors?.querySelectorAll(".color-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.color === color);
+    });
+    if (syncImage) {
+      activateImage(getImageIndexForColor(product, color));
+    }
+    updateStockAndQtyLimits();
+  }
 
   const sizeLabel = document.querySelector(".option-group label");
   if (sizeLabel && isFabric) sizeLabel.textContent = "Meters (min. 4)";
@@ -271,9 +337,7 @@ function initProductPage() {
     ).join("");
     colors.addEventListener("click", e => {
       if (!e.target.classList.contains("color-btn")) return;
-      colors.querySelectorAll(".color-btn").forEach(b => b.classList.remove("active"));
-      e.target.classList.add("active");
-      selectedColor = e.target.dataset.color;
+      selectColor(e.target.dataset.color);
     });
   }
 
@@ -282,28 +346,106 @@ function initProductPage() {
     qtyRow.querySelector(".qty-selector")?.style.setProperty("display", "none");
   }
 
+  if (isFabric && offersStitching) {
+    const colorGroup = document.querySelector(".color-options")?.closest(".option-group");
+    if (colorGroup && !document.querySelector("#tailoring-section")) {
+      const tailoringHTML = `
+        <div class="option-group tailoring-section" id="tailoring-section">
+          <label>Custom Tailoring</label>
+          <p class="tailoring-intro">Add expert stitching with this fabric, or buy fabric only.</p>
+          <div class="tailoring-choice">
+            <button type="button" class="tailoring-toggle-btn active" data-stitch="no">Fabric Only</button>
+            <button type="button" class="tailoring-toggle-btn" data-stitch="yes">With Stitching</button>
+          </div>
+          <div class="tailoring-types" id="tailoring-types" hidden>
+            <p class="tailoring-types-label">Select garment type:</p>
+            <div class="tailoring-type-options"></div>
+          </div>
+        </div>
+      `;
+      colorGroup.insertAdjacentHTML("afterend", tailoringHTML);
+
+      const typeContainer = document.querySelector(".tailoring-type-options");
+      if (typeContainer) {
+        typeContainer.innerHTML = allowedStitchingTypes.map((typeId, i) => {
+          const type = TAILORING_TYPES.find((item) => item.id === typeId) || { id: typeId, label: typeId };
+          const charge = getTailoringCharge(type.id);
+          return `<button type="button" class="tailoring-type-btn ${i === 0 ? "active" : ""}" data-type="${type.id}">
+            <span class="tailoring-type-name">${type.label}</span>
+            <span class="tailoring-type-price">+${formatPrice(charge)}</span>
+          </button>`;
+        }).join("");
+      }
+
+      document.querySelectorAll(".tailoring-toggle-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          wantsStitching = btn.dataset.stitch === "yes";
+          document.querySelectorAll(".tailoring-toggle-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          const typesPanel = document.querySelector("#tailoring-types");
+          if (typesPanel) typesPanel.hidden = !wantsStitching;
+          updatePriceDisplay();
+        });
+      });
+
+      document.querySelector(".tailoring-type-options")?.addEventListener("click", e => {
+        const btn = e.target.closest(".tailoring-type-btn");
+        if (!btn) return;
+        selectedTailoringType = btn.dataset.type;
+        document.querySelectorAll(".tailoring-type-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        updatePriceDisplay();
+      });
+    }
+  }
+
   const qtyEl = document.querySelector("#qty-value");
   document.querySelector("#qty-decrease")?.addEventListener("click", () => {
-    if (!isFabric && qty > 1) { qty--; if (qtyEl) qtyEl.textContent = qty; }
+    if (!isFabric && qty > 1) {
+      qty--;
+      updateQtyDisplay();
+    }
   });
   document.querySelector("#qty-increase")?.addEventListener("click", () => {
-    if (!isFabric) { qty++; if (qtyEl) qtyEl.textContent = qty; }
+    if (!isFabric) {
+      const maxQty = getMaxQtyForSelectedColor();
+      if (qty < maxQty) {
+        qty++;
+        updateQtyDisplay();
+      } else {
+        showToast(`Only ${maxQty} available for ${selectedColor}`);
+      }
+    }
   });
 
   document.querySelector("#add-to-cart-btn")?.addEventListener("click", () => {
     const currentProduct = getProductById(id);
-    if (isOutOfStock(currentProduct)) {
-      showToast("This product is out of stock");
+    if (isOutOfStock(currentProduct, selectedColor)) {
+      showToast(selectedColor ? `${selectedColor} is out of stock` : "This product is out of stock");
       return;
     }
     if (isFabric) {
-      addToCart(product.id, selectedSize, selectedColor, 1);
+      if (wantsStitching) {
+        if (!offersStitching) {
+          showToast("Custom stitching is not available for this fabric");
+          return;
+        }
+        if (!selectedTailoringType || !allowedStitchingTypes.includes(selectedTailoringType)) {
+          showToast("Please select a garment type for stitching");
+          return;
+        }
+      }
+      addToCart(product.id, selectedSize, selectedColor, 1, {
+        enabled: wantsStitching,
+        type: selectedTailoringType,
+        charge: getTailoringCharge(selectedTailoringType)
+      });
     } else {
       addToCart(product.id, selectedSize, selectedColor, qty);
     }
   });
 
-  updateProductDetailStock(id);
+  updateStockAndQtyLimits();
 
   const related = document.querySelector("#related-products");
   if (related) {
@@ -406,6 +548,104 @@ async function initContactForm() {
   form.email?.addEventListener("input", () => clearFieldError(form.email));
 }
 
+function initSearchModal() {
+  const searchToggle = document.querySelector(".search-toggle");
+  const searchModal = document.querySelector(".search-modal");
+  const searchModalClose = document.querySelector(".search-modal-close");
+  const searchInput = document.querySelector(".search-input");
+  const searchSubmit = document.querySelector(".search-submit");
+  const searchResults = document.querySelector(".search-results");
+
+  if (!searchToggle || !searchModal) return;
+
+  function openSearch() {
+    searchModal.classList.add("open");
+    setTimeout(() => searchInput?.focus(), 100);
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeSearch() {
+    searchModal.classList.remove("open");
+    document.body.style.overflow = "";
+    if (searchInput) searchInput.value = "";
+    if (searchResults) searchResults.innerHTML = "";
+  }
+
+  searchToggle.addEventListener("click", openSearch);
+  searchModalClose?.addEventListener("click", closeSearch);
+
+  searchModal.addEventListener("click", (e) => {
+    if (e.target === searchModal) closeSearch();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && searchModal.classList.contains("open")) {
+      closeSearch();
+    }
+  });
+
+  function performSearch(query) {
+    if (!query.trim()) {
+      if (searchResults) searchResults.innerHTML = "";
+      return;
+    }
+
+    const allProducts = getAllProducts();
+    const filtered = allProducts.filter(product =>
+      product.name.toLowerCase().includes(query.toLowerCase()) ||
+      product.description.toLowerCase().includes(query.toLowerCase()) ||
+      product.category.toLowerCase().includes(query.toLowerCase())
+    );
+
+    if (searchResults) {
+      if (filtered.length === 0) {
+        searchResults.innerHTML = '<div class="no-results">No products found</div>';
+      } else {
+        searchResults.innerHTML = filtered.map(product => `
+          <div class="search-result-item" data-product-id="${product.id}">
+            <img src="${product.image}" alt="${product.name}" class="search-result-image">
+            <div class="search-result-info">
+              <div class="search-result-title">${product.name}</div>
+              <div class="search-result-category">${product.category}</div>
+              <div class="search-result-price">${formatPrice(product.price)}</div>
+            </div>
+          </div>
+        `).join("");
+
+        // Add click handlers to search results
+        searchResults.querySelectorAll(".search-result-item").forEach(item => {
+          item.addEventListener("click", () => {
+            const productId = item.dataset.productId;
+            closeSearch();
+            window.location.href = `product.html?id=${productId}`;
+          });
+        });
+      }
+    }
+  }
+
+  let searchTimeout;
+  searchInput?.addEventListener("input", (e) => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => performSearch(e.target.value), 300);
+  });
+
+  searchSubmit?.addEventListener("click", () => {
+    const query = searchInput?.value || "";
+    if (query.trim()) {
+      closeSearch();
+      window.location.href = `shop.html?search=${encodeURIComponent(query)}`;
+    }
+  });
+
+  searchInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      searchSubmit?.click();
+    }
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initThemeToggle();
   initMobileNav();
@@ -419,5 +659,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initMeasurementTabs();
   initWhatsApp();
   initContactForm();
+  initSearchModal();
 });
 

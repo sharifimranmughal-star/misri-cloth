@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { Pool } = require("pg");
 const { createAdminApi } = require("./lib/admin-api");
+const { getColorStock, normalizeProductStock } = require("./lib/stock-utils");
 const {
   validatePhoneServer,
   validateEmailServer,
@@ -24,6 +25,7 @@ const MESSAGES_FILE = path.join(DATA_DIR, "messages.json");
 const PRODUCTS_FILE = path.join(DATA_DIR, "products.json");
 const ACTIVITY_FILE = path.join(DATA_DIR, "activity_logs.json");
 const NOTIFICATIONS_FILE = path.join(DATA_DIR, "notifications.json");
+const TAILORING_SETTINGS_FILE = path.join(DATA_DIR, "tailoring_charges.json");
 
 const OWNER_EMAIL = "sharifimranm@gmail.com";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "misri2026";
@@ -36,7 +38,11 @@ const dbPool = USE_DB
     })
   : null;
 
-let dbAvailable = USE_DB;
+let dbAvailable = false;
+
+function useDb() {
+  return USE_DB && dbAvailable;
+}
 
 async function checkDbAvailable() {
   if (!dbPool) return false;
@@ -60,6 +66,12 @@ function ensureDataFiles() {
   if (!fs.existsSync(PRODUCTS_FILE)) fs.writeFileSync(PRODUCTS_FILE, "[]");
   if (!fs.existsSync(ACTIVITY_FILE)) fs.writeFileSync(ACTIVITY_FILE, "[]");
   if (!fs.existsSync(NOTIFICATIONS_FILE)) fs.writeFileSync(NOTIFICATIONS_FILE, "[]");
+  if (!fs.existsSync(TAILORING_SETTINGS_FILE)) {
+    fs.writeFileSync(
+      TAILORING_SETTINGS_FILE,
+      JSON.stringify({ charges: require("./lib/tailoring-settings").DEFAULT_TAILORING_CHARGES }, null, 2)
+    );
+  }
 }
 
 function readJson(file) {
@@ -109,9 +121,16 @@ async function initDb() {
       meters NUMERIC(8,2),
       unit_price NUMERIC(12,2) NOT NULL,
       quantity INTEGER NOT NULL DEFAULT 1,
-      line_total NUMERIC(12,2) NOT NULL
+      line_total NUMERIC(12,2) NOT NULL,
+      tailoring_enabled BOOLEAN NOT NULL DEFAULT false,
+      tailoring_type VARCHAR(50),
+      tailoring_charge NUMERIC(12,2) DEFAULT 0
     );
   `);
+
+  await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tailoring_enabled BOOLEAN NOT NULL DEFAULT false;`);
+  await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tailoring_type VARCHAR(50);`);
+  await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tailoring_charge NUMERIC(12,2) DEFAULT 0;`);
 
   await dbPool.query(`
     CREATE TABLE IF NOT EXISTS contact_messages (
@@ -127,7 +146,7 @@ async function initDb() {
 }
 
 async function saveOrder(order) {
-  if (!USE_DB || !(await checkDbAvailable())) {
+  if (!useDb() || !(await checkDbAvailable())) {
     const orders = readJson(ORDERS_FILE);
     orders.unshift(order);
     writeJson(ORDERS_FILE, orders);
@@ -159,8 +178,9 @@ async function saveOrder(order) {
   for (const item of order.items) {
     await dbPool.query(
       `INSERT INTO order_items
-       (order_id, product_id, product_name, size_label, color, meters, unit_price, quantity, line_total)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+       (order_id, product_id, product_name, size_label, color, meters, unit_price, quantity, line_total,
+        tailoring_enabled, tailoring_type, tailoring_charge)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [
         orderId,
         item.product_id,
@@ -170,7 +190,10 @@ async function saveOrder(order) {
         item.meters || null,
         item.unit_price || 0,
         item.quantity || 1,
-        item.line_total || 0
+        item.line_total || 0,
+        Boolean(item.tailoring_enabled || item.tailoringEnabled),
+        item.tailoring_type || item.tailoringType || null,
+        Number(item.tailoring_charge ?? item.tailoringCharge ?? 0)
       ]
     );
   }
@@ -182,7 +205,7 @@ async function saveOrder(order) {
 }
 
 async function saveContact(entry) {
-  if (!USE_DB || !(await checkDbAvailable())) {
+  if (!useDb() || !(await checkDbAvailable())) {
     const messages = readJson(MESSAGES_FILE);
     messages.unshift(entry);
     writeJson(MESSAGES_FILE, messages);
@@ -197,7 +220,7 @@ async function saveContact(entry) {
 }
 
 async function getOrders() {
-  if (!USE_DB || !(await checkDbAvailable())) return readJson(ORDERS_FILE);
+  if (!useDb() || !(await checkDbAvailable())) return readJson(ORDERS_FILE);
 
   const ordersResult = await dbPool.query(
     `SELECT id, order_ref, customer_name, customer_phone, customer_email, customer_address,
@@ -207,7 +230,8 @@ async function getOrders() {
   );
 
   const itemsResult = await dbPool.query(
-    `SELECT order_id, product_id, product_name, size_label, color, meters, unit_price, quantity, line_total
+    `SELECT order_id, product_id, product_name, size_label, color, meters, unit_price, quantity, line_total,
+            tailoring_enabled, tailoring_type, tailoring_charge
      FROM order_items`
   );
 
@@ -225,7 +249,10 @@ async function getOrders() {
       meters: row.meters === null ? null : Number(row.meters),
       unit_price: Number(row.unit_price),
       quantity: row.quantity,
-      line_total: Number(row.line_total)
+      line_total: Number(row.line_total),
+      tailoring_enabled: Boolean(row.tailoring_enabled),
+      tailoring_type: row.tailoring_type || null,
+      tailoring_charge: Number(row.tailoring_charge || 0)
     };
     if (!itemsByOrder.has(row.order_id)) itemsByOrder.set(row.order_id, []);
     itemsByOrder.get(row.order_id).push(normalizedItem);
@@ -262,7 +289,7 @@ async function getOrders() {
 }
 
 async function getMessages() {
-  if (!USE_DB || !(await checkDbAvailable())) return readJson(MESSAGES_FILE);
+  if (!useDb() || !(await checkDbAvailable())) return readJson(MESSAGES_FILE);
 
   const result = await dbPool.query(
     `SELECT id, first_name, last_name, email, subject, message, created_at
@@ -307,7 +334,7 @@ async function notifyOwner(subject, body, customerEmail) {
 const adminApi = createAdminApi({
   ROOT,
   DATA_DIR,
-  USE_DB,
+  useDb,
   dbPool,
   ADMIN_PASSWORD,
   readJson,
@@ -319,6 +346,7 @@ const adminApi = createAdminApi({
   PRODUCTS_FILE,
   ACTIVITY_FILE,
   NOTIFICATIONS_FILE,
+  TAILORING_SETTINGS_FILE,
   UPLOADS_DIR,
   ensureDataFiles
 });
@@ -337,17 +365,18 @@ app.post("/api/submit_order", async (req, res) => {
     }
 
     for (const item of items) {
-      const product = await adminApi.getProductById(item.product_id, false);
+      const product = normalizeProductStock(await adminApi.getProductById(item.product_id, false));
       if (!product) {
         return res.status(400).json({ success: false, message: `${item.product_name} is no longer available` });
       }
       const needed = item.meters ? Math.ceil(item.meters) : (item.quantity || 1);
-      const availableStock = product.stockQuantity || 0;
-      
+      const availableStock = getColorStock(product, item.color);
+
       if (availableStock < needed) {
+        const colorLabel = item.color ? ` (${item.color})` : "";
         return res.status(400).json({
           success: false,
-          message: `${product.name} is out of stock or insufficient quantity available. Available: ${availableStock}, Requested: ${needed}`
+          message: `${product.name}${colorLabel} is out of stock or insufficient quantity available. Available: ${availableStock}, Requested: ${needed}`
         });
       }
     }
@@ -376,7 +405,7 @@ app.post("/api/submit_order", async (req, res) => {
     try {
       for (const item of items) {
         const qty = item.meters ? Math.ceil(item.meters) : (item.quantity || 1);
-        await adminApi.adjustStock(item.product_id, -qty, "System", "Order placed — stock reduced");
+        await adminApi.adjustStock(item.product_id, -qty, "System", "Order placed — stock reduced", item.color);
       }
     } catch (stockErr) {
       console.error("Stock adjustment failed:", stockErr.message);
@@ -406,10 +435,16 @@ app.post("/api/submit_order", async (req, res) => {
       if (notes) emailBody += `Notes: ${notes}\n`;
       emailBody += "\n--- ITEMS ---\n";
       items.forEach((item) => {
+        const tailoringType = item.tailoring_type || item.tailoringType;
+        const tailoringCharge = item.tailoring_charge ?? item.tailoringCharge ?? 0;
+        const tailoringEnabled = item.tailoring_enabled ?? item.tailoringEnabled;
+        const tailoringNote = tailoringEnabled && tailoringType
+          ? ` + Custom ${tailoringType} stitching (Rs.${tailoringCharge})`
+          : "";
         if (item.meters) {
-          emailBody += `${item.product_name} — ${item.meters}m @ Rs.${item.unit_price}/m = Rs.${item.line_total}\n`;
+          emailBody += `${item.product_name} — ${item.meters}m @ Rs.${item.unit_price}/m${tailoringNote} = Rs.${item.line_total}\n`;
         } else {
-          emailBody += `${item.product_name} — ${item.size}, ${item.color} x${item.quantity} = Rs.${item.line_total}\n`;
+          emailBody += `${item.product_name} — ${item.size}, ${item.color} x${item.quantity}${tailoringNote} = Rs.${item.line_total}\n`;
         }
       });
       emailBody += `\nTOTAL: Rs.${total}`;
@@ -467,7 +502,7 @@ app.post("/api/send_contact", async (req, res) => {
 });
 
 app.get("/api/health", async (req, res) => {
-  const storage = USE_DB ? "postgresql" : "json-file";
+  const storage = useDb() ? "postgresql" : "json-file";
   let dbOk = false;
   if (USE_DB) {
     try {
@@ -480,7 +515,7 @@ app.get("/api/health", async (req, res) => {
   res.json({
     ok: true,
     storage,
-    persistent: USE_DB && dbOk,
+    persistent: useDb() && dbOk,
     warning: !USE_DB && process.env.RENDER
       ? "Orders will disappear on restart. Add DATABASE_URL in Render Environment."
       : USE_DB && !dbOk
@@ -521,31 +556,28 @@ if (require.main === module) {
   });
 
   (async () => {
-    try {
-      if (USE_DB) {
+    ensureDataFiles();
+
+    if (USE_DB) {
+      try {
+        await dbPool.query("SELECT 1");
+        dbAvailable = true;
         await initDb();
         await adminApi.initAdminTables();
-        dbAvailable = await checkDbAvailable();
-        if (dbAvailable) {
-          console.log("PostgreSQL connected. Orders saved permanently.");
-        } else {
-          console.log("PostgreSQL connection failed during startup. Using JSON storage fallback.");
-        }
-      } else {
-        ensureDataFiles();
+        console.log("PostgreSQL connected. Orders saved permanently.");
+      } catch (dbErr) {
+        dbAvailable = false;
+        console.error("Database connection failed, falling back to JSON storage:", dbErr.message);
         await adminApi.initAdminTables();
-        if (process.env.RENDER) {
-          console.log("WARNING: DATABASE_URL missing on Render. Orders will NOT persist!");
-        } else {
-          console.log("Using local JSON storage.");
-        }
+        console.log("Using local JSON storage (fallback).");
       }
-    } catch (dbErr) {
-      console.error("Database connection failed, falling back to JSON storage:", dbErr.message);
-      dbAvailable = false;
-      ensureDataFiles();
+    } else {
       await adminApi.initAdminTables();
-      console.log("Using local JSON storage (fallback).");
+      if (process.env.RENDER) {
+        console.log("WARNING: DATABASE_URL missing on Render. Orders will NOT persist!");
+      } else {
+        console.log("Using local JSON storage.");
+      }
     }
 
     app.listen(PORT, "0.0.0.0", () => {

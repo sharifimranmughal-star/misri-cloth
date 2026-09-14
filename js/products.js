@@ -6,6 +6,26 @@ const CATEGORY_LABELS = {
   waistcoats: "Waistcoats"
 };
 
+const DEFAULT_TAILORING_CHARGES = {
+  "shalwar-kameez": 2500,
+  suits: 8000,
+  "prince-coat": 6000,
+  waistcoats: 3500
+};
+
+let TAILORING_CHARGES = { ...DEFAULT_TAILORING_CHARGES };
+let TAILORING_TYPES = [
+  { id: "shalwar-kameez", label: "Shalwar Qameez" },
+  { id: "suits", label: "Suit" },
+  { id: "prince-coat", label: "Prince Coat" },
+  { id: "waistcoats", label: "Waistcoat" }
+];
+let tailoringChargesLoaded = false;
+
+function getAllProducts() {
+  return PRODUCTS;
+}
+
 const PRODUCTS = [
   {
     id: 1,
@@ -24,6 +44,8 @@ const PRODUCTS = [
     sizes: ["4 Meter", "5 Meter", "6 Meter", "7 Meter", "8 Meter"],
     colors: ["Navy", "Charcoal", "Black", "Brown"],
     referenceMeters: 4,
+    stitchingEnabled: true,
+    stitchingTypes: ["shalwar-kameez", "suits", "prince-coat", "waistcoats"],
     description: "High-quality wash & wear fabric ideal for suits and formal wear. Priced per meter — minimum order 4 meters. Wrinkle-resistant and durable.",
     featured: true,
     new: false
@@ -43,6 +65,8 @@ const PRODUCTS = [
     ],
     sizes: ["4 Meter", "5 Meter", "6 Meter", "7 Meter", "8 Meter"],
     colors: ["Dark Grey", "Navy", "Burgundy"],
+    stitchingEnabled: true,
+    stitchingTypes: ["shalwar-kameez", "suits", "prince-coat", "waistcoats"],
     referenceMeters: 4,
     description: "Imported wool blend suiting fabric with a refined finish. Priced per meter — minimum order 4 meters.",
     featured: true,
@@ -216,20 +240,113 @@ function getProductsByCategory(category) {
   return PRODUCTS.filter(p => p.category === category);
 }
 
-function getProductById(id) {
-  if (id == null || id === "") return undefined;
-  const numId = Number(id);
-  const product = PRODUCTS.find(p => Number(p.id) === numId);
-  return product;
-}
-
 function isFabricProduct(product) {
   return product && product.category === "fabric";
 }
 
-function isOutOfStock(product) {
-  const stock = product.stockQuantity ?? 0;
-  return stock === 0;
+function sumColorStock(colorStock) {
+  if (!colorStock || typeof colorStock !== "object") return 0;
+  return Object.values(colorStock).reduce((sum, value) => sum + (Number(value) || 0), 0);
+}
+
+function initColorStockFromLegacyTotal(total, colors) {
+  const colorStock = {};
+  if (!Array.isArray(colors) || !colors.length) return colorStock;
+
+  const safeTotal = Math.max(0, Number(total) || 0);
+  colors.forEach((color, index) => {
+    colorStock[color] = index === 0 ? safeTotal : 0;
+  });
+
+  return colorStock;
+}
+
+function parseColorStock(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function hasColorVariants(product) {
+  return Array.isArray(product?.colors) && product.colors.length > 0;
+}
+
+function normalizeProductStock(product) {
+  if (!product) return product;
+
+  const colors = Array.isArray(product.colors) ? product.colors.map((c) => String(c).trim()).filter(Boolean) : [];
+  product.colors = colors;
+
+  if (!colors.length) {
+    product.colorStock = parseColorStock(product.colorStock);
+    product.stockQuantity = Math.max(0, Number(product.stockQuantity) || 0);
+    return product;
+  }
+
+  const colorStock = parseColorStock(product.colorStock);
+
+  colors.forEach((color) => {
+    colorStock[color] = colorStock[color] != null
+      ? Math.max(0, Number(colorStock[color]) || 0)
+      : 0;
+  });
+
+  Object.keys(colorStock).forEach((color) => {
+    if (!colors.includes(color)) delete colorStock[color];
+  });
+
+  product.colorStock = colorStock;
+  product.stockQuantity = sumColorStock(colorStock);
+  return product;
+}
+
+function getColorStock(product, color) {
+  normalizeProductStock(product);
+  if (!hasColorVariants(product)) {
+    return Math.max(0, Number(product.stockQuantity) || 0);
+  }
+  if (!color) {
+    return Math.max(0, Number(product.stockQuantity) || 0);
+  }
+  return Math.max(0, Number(product.colorStock?.[color]) || 0);
+}
+
+function getColorForImageIndex(product, index) {
+  const colors = product?.colors || [];
+  if (!colors.length || index < 0 || index >= colors.length) return null;
+  return colors[index];
+}
+
+function getImageIndexForColor(product, color) {
+  const colors = product?.colors || [];
+  const images = product?.images || [];
+  if (!colors.length || !images.length) return 0;
+
+  const colorIndex = colors.indexOf(color);
+  if (colorIndex >= 0 && colorIndex < images.length) return colorIndex;
+  return 0;
+}
+
+function isOutOfStock(product, color) {
+  if (!product) return true;
+  if (hasColorVariants(product) && color) {
+    return getColorStock(product, color) <= 0;
+  }
+  return getColorStock(product) <= 0;
+}
+
+function getProductById(id) {
+  if (id == null || id === "") return undefined;
+  const numId = Number(id);
+  const product = PRODUCTS.find(p => Number(p.id) === numId);
+  return product ? normalizeProductStock({ ...product }) : undefined;
 }
 
 function parseMetersFromSize(size) {
@@ -245,11 +362,58 @@ function getFabricLineTotal(product, meters) {
   return getPerMeterPrice(product) * meters;
 }
 
-function getLineTotal(item) {
-  if (item.isFabric) {
-    return item.unitPrice * item.meters;
+function getTailoringLabel(typeId) {
+  return TAILORING_TYPES.find((t) => t.id === typeId)?.label || typeId || "";
+}
+
+function getTailoringCharge(typeId) {
+  if (!typeId) return 0;
+  return Number(TAILORING_CHARGES[typeId]) || 0;
+}
+
+function getProductStitchingTypes(product) {
+  if (!product || product.category !== "fabric") return [];
+  const validIds = TAILORING_TYPES.map((type) => type.id);
+  const hasExplicitEnabled = typeof product.stitchingEnabled === "boolean";
+  const hasExplicitTypes = Array.isArray(product.stitchingTypes);
+
+  if (!hasExplicitEnabled && !hasExplicitTypes) {
+    return validIds;
   }
-  return item.unitPrice * item.qty;
+
+  if (product.stitchingEnabled === false) return [];
+
+  if (hasExplicitTypes) {
+    return product.stitchingTypes.filter((id) => validIds.includes(id));
+  }
+
+  return validIds;
+}
+
+function productOffersStitching(product) {
+  return getProductStitchingTypes(product).length > 0;
+}
+
+function getLineTotal(item) {
+  const fabricTotal = item.isFabric ? item.unitPrice * item.meters : item.unitPrice * item.qty;
+  const tailoringTotal = item.tailoringEnabled ? Number(item.tailoringCharge || 0) : 0;
+  return fabricTotal + tailoringTotal;
+}
+
+async function loadTailoringChargesFromAPI() {
+  try {
+    const response = await fetch("/api/tailoring-charges");
+    const data = await response.json();
+    if (data.success) {
+      TAILORING_CHARGES = { ...DEFAULT_TAILORING_CHARGES, ...(data.charges || {}) };
+      if (Array.isArray(data.types) && data.types.length) {
+        TAILORING_TYPES = data.types;
+      }
+      tailoringChargesLoaded = true;
+    }
+  } catch (err) {
+    console.error("Error loading tailoring charges:", err);
+  }
 }
 
 function formatPrice(price) {
@@ -309,20 +473,20 @@ async function loadProductsFromAPI() {
     const data = await response.json();
     if (data.success && data.products) {
       // Normalize product fields to match expected structure
-      const normalizedProducts = data.products.map(p => ({
+      const normalizedProducts = data.products.map(p => normalizeProductStock({
         ...p,
         id: Number(p.id),
-        // Ensure price field exists
         price: p.price || 0,
-        // Normalize field names for cart compatibility
         stockQuantity: p.stockQuantity || p.stock_quantity || 0,
+        colorStock: p.colorStock || p.color_stock || {},
         originalPrice: p.originalPrice || p.original_price || null,
-        // Ensure required fields
         category: p.category || 'fabric',
         sizes: p.sizes || ["Custom Measurement"],
         colors: p.colors || [],
         images: p.images || [p.image || ""],
-        referenceMeters: p.referenceMeters || p.reference_meters || 4
+        referenceMeters: p.referenceMeters || p.reference_meters || 4,
+        stitchingEnabled: p.stitchingEnabled,
+        stitchingTypes: p.stitchingTypes
       }));
       
       // Replace the static PRODUCTS array with API data
@@ -379,7 +543,7 @@ function handleProductEvent(event) {
       loadProductsFromAPI(); // Reload all products from API
       break;
     case 'stock_updated':
-      updateStockInArray(event.productId, event.stock);
+      updateStockInArray(event.productId, event.stock, event.colorStock);
       break;
     case 'connected':
       console.log('Connected to real-time product updates');
@@ -390,23 +554,31 @@ function handleProductEvent(event) {
   }
 }
 
-function updateStockInArray(productId, newStock) {
+function updateStockInArray(productId, newStock, colorStock) {
   const product = PRODUCTS.find(p => p.id === productId);
   if (product) {
-    product.stockQuantity = newStock;
-    console.log(`Stock updated for ${product.name}: ${newStock} units`);
+    if (colorStock && typeof colorStock === "object" && Object.keys(colorStock).length > 0) {
+      product.colorStock = { ...colorStock };
+      product.stockQuantity = sumColorStock(product.colorStock);
+    } else if (!hasColorVariants(product)) {
+      product.stockQuantity = newStock;
+      product.colorStock = {};
+    }
+    console.log(`Stock updated for ${product.name}: ${product.stockQuantity} units`);
     refreshProductDisplays();
   }
 }
 
-function updateProductDetailStock(productId) {
+function updateProductDetailStock(productId, selectedColor) {
   const addBtn = document.querySelector("#add-to-cart-btn");
   if (!addBtn) return;
 
   const product = getProductById(productId);
   if (!product) return;
 
-  const outOfStock = isOutOfStock(product);
+  const color = selectedColor || product.colors?.[0];
+  const outOfStock = isOutOfStock(product, color);
+  const available = getColorStock(product, color);
   const actions = document.querySelector(".product-actions");
   const existingNotice = actions?.querySelector(".stock-notice");
 
@@ -414,12 +586,28 @@ function updateProductDetailStock(productId) {
     addBtn.disabled = true;
     addBtn.textContent = "Out of Stock";
     if (actions && !existingNotice) {
-      actions.insertAdjacentHTML("afterbegin", '<p class="stock-notice" style="color:#8b2942;font-weight:600;margin-bottom:12px">This item is currently out of stock.</p>');
+      actions.insertAdjacentHTML("afterbegin", `<p class="stock-notice" style="color:#8b2942;font-weight:600;margin-bottom:12px">${color ? `${color} is currently out of stock.` : "This item is currently out of stock."}</p>`);
+    } else if (existingNotice) {
+      existingNotice.textContent = color ? `${color} is currently out of stock.` : "This item is currently out of stock.";
     }
   } else {
     addBtn.disabled = false;
     addBtn.innerHTML = '<i class="fas fa-shopping-bag"></i> Add to Cart';
-    existingNotice?.remove();
+    if (existingNotice) {
+      if (available <= 5) {
+        existingNotice.textContent = color
+          ? `Only ${available} left in ${color}.`
+          : `Only ${available} left in stock.`;
+        existingNotice.style.display = "";
+      } else {
+        existingNotice.remove();
+      }
+    } else if (actions && available <= 5) {
+      actions.insertAdjacentHTML(
+        "afterbegin",
+        `<p class="stock-notice" style="color:#8b2942;font-weight:600;margin-bottom:12px">${color ? `Only ${available} left in ${color}.` : `Only ${available} left in stock.`}</p>`
+      );
+    }
   }
 }
 
@@ -467,4 +655,5 @@ if (typeof window !== 'undefined') {
 // Also load products immediately for initial render
 if (typeof window !== 'undefined') {
   loadProductsFromAPI();
+  loadTailoringChargesFromAPI();
 }
