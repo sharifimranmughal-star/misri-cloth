@@ -537,12 +537,15 @@ function handleProductEvent(event) {
   console.log('Handling product event:', event.type);
   switch(event.type) {
     case 'product_updated':
+      console.log('Product updated event received, reloading products');
       loadProductsFromAPI(); // Reload all products from API
       break;
     case 'product_deleted':
+      console.log('Product deleted event received, reloading products');
       loadProductsFromAPI(); // Reload all products from API
       break;
     case 'stock_updated':
+      console.log('Stock updated event received:', event);
       updateStockInArray(event.productId, event.stock, event.colorStock);
       break;
     case 'connected':
@@ -557,15 +560,37 @@ function handleProductEvent(event) {
 function updateStockInArray(productId, newStock, colorStock) {
   const product = PRODUCTS.find(p => p.id === productId);
   if (product) {
+    // Handle color variants
     if (colorStock && typeof colorStock === "object" && Object.keys(colorStock).length > 0) {
       product.colorStock = { ...colorStock };
       product.stockQuantity = sumColorStock(product.colorStock);
+      console.log(`Color stock updated for ${product.name}:`, product.colorStock, `Total: ${product.stockQuantity} units`);
     } else if (!hasColorVariants(product)) {
+      // Handle products without color variants
       product.stockQuantity = newStock;
       product.colorStock = {};
+      console.log(`Stock updated for ${product.name}: ${product.stockQuantity} units`);
+    } else {
+      // Handle color variant products where specific color stock wasn't provided
+      // Update total stock but preserve existing color stock distribution
+      product.stockQuantity = newStock;
+      console.log(`Total stock updated for color variant ${product.name}: ${product.stockQuantity} units (color stock preserved)`);
     }
-    console.log(`Stock updated for ${product.name}: ${product.stockQuantity} units`);
+    
+    // Force immediate refresh of all product displays
     refreshProductDisplays();
+    
+    // Also update specific product detail page if open
+    const currentProductId = new URLSearchParams(window.location.search).get("id");
+    if (currentProductId && Number(currentProductId) === productId) {
+      if (typeof updateProductDetailStock === "function") {
+        const selectedColor = document.querySelector(".color-btn.active")?.dataset.color;
+        updateProductDetailStock(productId, selectedColor);
+      }
+    }
+  } else {
+    console.warn(`Product with ID ${productId} not found in local array, reloading from API`);
+    loadProductsFromAPI();
   }
 }
 
@@ -633,8 +658,11 @@ function refreshProductDisplays() {
 
   const productId = new URLSearchParams(window.location.search).get("id");
   if (productId) {
-    if (typeof initProductPage === "function") initProductPage();
-    updateProductDetailStock(productId);
+    const product = getProductById(productId);
+    if (product) {
+      const selectedColor = document.querySelector(".color-btn.active")?.dataset.color || product.colors?.[0];
+      updateProductDetailStock(productId, selectedColor);
+    }
   }
 }
 
