@@ -2,18 +2,20 @@
 const ORDER_STATUSES = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"];
 const PAYMENT_STATUSES = ["pending", "paid", "failed", "refunded"];
 const CATEGORIES = [
-  { value: "fabric", label: "Men's Fabric" },
-  { value: "suits", label: "Suits" },
-  { value: "shalwar-kameez", label: "Shalwar Kameez" },
-  { value: "coats", label: "Coats" },
-  { value: "waistcoats", label: "Waistcoats" }
+  { value: "fabric", label: "Collections — Fabric" },
+  { value: "suits", label: "Stitching — Suits (2, 3 & 4 Piece)" },
+  { value: "shalwar-kameez", label: "Stitching — Shalwar Kameez & Kurtas" },
+  { value: "coats", label: "Stitching — Coats & Blazers" },
+  { value: "prince-coat", label: "Stitching — Prince Coat" },
+  { value: "waistcoats", label: "Stitching — Waistcoats" }
 ];
 const LOW_STOCK_THRESHOLD = 5;
 const TAILORING_LABELS = {
   "shalwar-kameez": "Shalwar Qameez",
   suits: "Suit",
   "prince-coat": "Prince Coat",
-  waistcoats: "Waistcoat"
+  waistcoats: "Waistcoat",
+  coats: "Coat / Blazer"
 };
 let MEASUREMENT_SCHEMA = null;
 
@@ -209,6 +211,7 @@ function showSection(name) {
     reports: "Reports",
     activity: "Activity Log",
     messages: "Messages",
+    categories: "Categories",
     tailoring: "Tailoring"
   };
   const titleEl = $("#page-title");
@@ -225,6 +228,7 @@ function showSection(name) {
     reports: loadReports,
     activity: loadActivity,
     messages: loadMessages,
+    categories: loadCategoriesSection,
     tailoring: loadTailoringSection
   };
   loaders[name]?.();
@@ -357,7 +361,7 @@ function renderStats(s) {
 async function loadProducts() {
   showLoading(true);
   try {
-    const data = await apiFetch("/api/admin/products");
+    const [data] = await Promise.all([apiFetch("/api/admin/products"), refreshAdminCategories()]);
     renderProductsTable(data.products || []);
   } catch (err) {
     showToast(err.message, "error");
@@ -392,18 +396,56 @@ function renderProductStockCell(p) {
   </div>`;
 }
 
+// Keep expanded categories when stock or product actions refresh the inventory.
+const productCategoryOpenState = new Map();
 function renderProductsTable(products) {
+  const host = $("#products-table");
+  host.querySelectorAll('details[data-product-group]').forEach(group => {
+    productCategoryOpenState.set(group.dataset.productGroup, group.open);
+  });
   if (!products.length) {
-    $("#products-table").innerHTML = `<p class="empty-state">No products yet. Add your first product.</p>`;
+    host.innerHTML = '<p class="empty-state">No products yet. Add your first product.</p>';
     return;
+  }
+  host.innerHTML = ['collections', 'stitching'].map(section => {
+    const sectionProducts = products.filter(product => (product.category === 'fabric') === (section === 'collections'));
+    const groups = (MisriCatalog.categories[section] || []).map(category => ({ id: category.id, name: category.name, products: [] }));
+    const byId = new Map(groups.map(group => [group.id, group]));
+    sectionProducts.forEach(product => {
+      const id = section === 'collections' ? MisriCatalog.fabricType(product) : product.category;
+      if (!byId.has(id)) {
+        const group = { id, name: id || 'Unassigned', products: [] };
+        byId.set(id, group); groups.push(group);
+      }
+      byId.get(id).products.push(product);
+    });
+    const firstPopulated = groups.find(group => group.products.length)?.id;
+    const label = section === 'collections' ? 'Collections' : 'Stitching';
+    return `<section class="product-category-section" aria-label="${label} products">
+      <div class="product-category-section-heading"><h3>${label}</h3><span>${sectionProducts.length} product${sectionProducts.length === 1 ? '' : 's'}</span></div>
+      ${groups.map(group => {
+        const key = section + ':' + group.id;
+        const open = productCategoryOpenState.has(key) ? productCategoryOpenState.get(key) : group.id === firstPopulated;
+        return `<details class="product-category-group" data-product-group="${esc(key)}" ${open ? 'open' : ''}>
+          <summary><span>${esc(group.name)}</span><span class="product-category-count">${group.products.length} product${group.products.length === 1 ? '' : 's'}</span></summary>
+          ${productCategoryTableHTML(group.products)}
+        </details>`;
+      }).join('')}
+    </section>`;
+  }).join('');
+}
+
+function productCategoryTableHTML(products) {
+  if (!products.length) {
+    return `<p class="empty-state">No products in this category yet.</p>`;
   }
   const rows = products.map((p) => {
     const stockClass = p.stockQuantity <= 0 ? "stock-out" : p.stockQuantity <= LOW_STOCK_THRESHOLD ? "stock-low" : "";
     return `<tr>
       <td><img src="${esc(p.image)}" class="product-thumb" alt=""></td>
       <td><strong>${esc(p.name)}</strong><br><small>${esc(p.sku || "—")}</small></td>
-      <td>${esc(p.category)}</td>
-      <td>${p.category === "fabric" && p.stitchingEnabled ? `<span class="tailoring-badge">✂️ ${(p.stitchingTypes || []).map((id) => TAILORING_LABELS[id] || id).join(", ") || "On"}</span>` : (p.category === "fabric" ? "—" : "")}</td>
+      <td>${esc(p.category === "fabric" ? "Collections / " + MisriCatalog.fabricTypes[MisriCatalog.fabricType(p)] : "Stitching / " + (CATEGORIES.find(c => c.value === p.category)?.label.replace("Stitching — ", "") || p.category))}</td>
+      <td>${p.category === "fabric" && p.stitchingEnabled ? `<span class="tailoring-badge">✂️ ${(p.stitchingTypes || []).map((id) => TAILORING_LABELS[id] || id).join(", ") || "On"}</span>` : (p.category === "fabric" ? "—" : esc([...MisriCatalog.garmentOptions(p).readyMadeSizes, ...(MisriCatalog.garmentOptions(p).customEnabled ? ["Custom Stitching"] : [])].join(", ")))}</td>
       <td>${fmtMoney(p.price)}</td>
       <td class="${stockClass}">${renderProductStockCell(p)}</td>
       <td>${statusBadge(p.status)} ${p.isVisible ? "" : '<span class="status-badge status-inactive">Hidden</span>'}</td>
@@ -418,7 +460,7 @@ function renderProductsTable(products) {
       </td>
     </tr>`;
   }).join("");
-  $("#products-table").innerHTML = `
+  return `
     <div class="admin-table-wrap"><table class="admin-table">
       <thead><tr><th>Image</th><th>Product</th><th>Category</th><th>Stitching</th><th>Price</th><th>Stock</th><th>Status</th><th>Featured</th><th>Actions</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -559,6 +601,8 @@ function openProductModal(product = null) {
   $("#pf-price").value = product?.price || "";
   $("#pf-original").value = product?.originalPrice || "";
   $("#pf-category").value = product?.category || "fabric";
+  $("#pf-fabric-type").value = product ? MisriCatalog.fabricType(product) : (MisriCatalog.fabricTypes.other ? "other" : MisriCatalog.categories.collections[0]?.id || "");
+  $("#pf-fabric-type-group").hidden = $("#pf-category").value !== "fabric";
   $("#pf-sku").value = product?.sku || "";
   $("#pf-stock").value = product?.stockQuantity ?? 0;
   $("#pf-status").value = product?.status || "active";
@@ -572,13 +616,14 @@ function openProductModal(product = null) {
   $("#pf-new").checked = Boolean(product?.new);
   $("#pf-visible").checked = product ? product.isVisible !== false : true;
   renderProductStitchingFields(product);
+  renderGarmentOptions(product);
   renderImagePreviews();
   $("#product-modal").classList.add("open");
 }
 
 function getTailoringTypeOptions() {
   if (tailoringTypes.length) return tailoringTypes;
-  return Object.entries(TAILORING_LABELS).map(([id, label]) => ({ id, label }));
+  return Object.entries(TAILORING_LABELS).filter(([id]) => id !== "coats").map(([id, label]) => ({ id, label }));
 }
 
 function selectedStitchingTypesFrom(container) {
@@ -705,6 +750,7 @@ async function saveProductForm(e) {
     price: Number($("#pf-price").value),
     originalPrice: $("#pf-original").value ? Number($("#pf-original").value) : null,
     category: $("#pf-category").value,
+    fabricType: $("#pf-category").value === "fabric" ? $("#pf-fabric-type").value : null,
     sku: $("#pf-sku").value.trim(),
     stockQuantity,
     colorStock,
@@ -720,9 +766,18 @@ async function saveProductForm(e) {
     isVisible: $("#pf-visible").checked,
     image: productImages[0] || "",
     images: productImages,
-    ...getProductFormStitching()
+    ...getProductFormStitching(),
+    garmentOptions: $("#pf-category").value === "fabric" ? null : collectGarmentOptions()
   };
 
+  if (payload.category !== "fabric") {
+    const options = payload.garmentOptions;
+    if (!options.customEnabled && !options.readyMadeSizes.length) {
+      showToast("Select a ready-made size or enable custom stitching", "error");
+      return;
+    }
+    payload.sizes = [...options.readyMadeSizes, ...(options.customEnabled ? ["Custom Stitching"] : [])];
+  }
   if (!payload.name || !payload.price) {
     showToast("Name and price are required", "error");
     return;
@@ -866,7 +921,7 @@ function renderOrdersTable(orders) {
       const measureInfo = i.tailoring_enabled && i.tailoring_measurements
         ? renderMeasurementsSummary(i.tailoring_type, i.tailoring_measurements)
         : "";
-      return `${esc(i.product_name)} ${itemDetails ? `(${itemDetails})` : ''} ${quantityInfo}${tailoringInfo}${measureInfo}`;
+      return `${esc(i.product_name)} ${itemDetails ? `(${itemDetails})` : ''} ${quantityInfo}${tailoringInfo}${measureInfo}${renderOrderAddons(i)}`;
     }).join("<br>");
     const statusOpts = ORDER_STATUSES.map((s) =>
       `<option value="${s}" ${o.status === s ? "selected" : ""}>${s}</option>`
@@ -963,7 +1018,7 @@ async function viewOrderDetails(orderId) {
       const quantityInfo = item.meters ? `${item.meters}m × ${item.quantity || 1}` : `×${item.quantity}`;
       const itemImage = item.image || 'https://via.placeholder.com/60?text=No+Image';
       const tailoringBadge = item.tailoring_enabled && item.tailoring_type
-        ? `<span class="tailoring-badge">✂️ ${esc(TAILORING_LABELS[item.tailoring_type] || item.tailoring_type)} (+${fmtMoney(item.tailoring_charge || 0)})</span>`
+        ? `<span class="tailoring-badge">✂️ ${esc(TAILORING_LABELS[item.tailoring_type] || item.tailoring_type)} ${item.meters ? `(+${fmtMoney(item.tailoring_charge || 0)})` : "(included)"}</span>`
         : '';
       const measurementsHTML = item.tailoring_enabled && item.tailoring_measurements
         ? renderMeasurementsHTML(item.tailoring_type, item.tailoring_measurements)
@@ -981,6 +1036,7 @@ async function viewOrderDetails(orderId) {
               ${tailoringBadge}
             </div>
             ${measurementsHTML}
+            ${renderOrderAddons(item)}
             <div class="order-item-price">${fmtMoney(item.unit_price)} each</div>
           </div>
           <div class="order-item-total">${fmtMoney(item.line_total)}</div>
@@ -1244,6 +1300,7 @@ async function loadTailoringSection() {
       apiFetch("/api/admin/products")
     ]);
     tailoringTypes = chargeData.types || [];
+    renderStitchingAddonsEditor(chargeData.addons || []);
     const charges = chargeData.charges || {};
     const form = $("#tailoring-charges-form");
     if (form) {
@@ -1381,7 +1438,8 @@ async function saveTailoringCharges() {
 }
 
 /* ── Init ── */
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  await refreshAdminCategories();
   const currentTheme = document.documentElement.getAttribute("data-theme");
   const icon = document.querySelector(".admin-theme-toggle i");
   if (icon) {
@@ -1393,6 +1451,8 @@ document.addEventListener("DOMContentLoaded", () => {
   setupColorStockRows();
   $("#product-form")?.addEventListener("submit", saveProductForm);
   $("#pf-category")?.addEventListener("change", () => {
+    $("#pf-fabric-type-group").hidden = $("#pf-category").value !== "fabric";
+    renderGarmentOptions(null);
     renderProductStitchingFields({
       category: $("#pf-category").value,
       stitchingEnabled: Boolean($("#pf-stitching")?.checked),
@@ -1400,10 +1460,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
   $("#pf-stitching")?.addEventListener("change", toggleProductStitchingTypes);
+  $("#pf-custom-enabled").addEventListener("change", () => { $("#pf-measurement-type").disabled = !$("#pf-custom-enabled").checked; });
 
-  CATEGORIES.forEach((c) => {
-    $("#pf-category")?.insertAdjacentHTML("beforeend", `<option value="${c.value}">${c.label}</option>`);
-  });
+
 
   $("#order-search")?.addEventListener("input", (e) => {
     orderSearch = e.target.value;
@@ -1429,3 +1488,115 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+
+function renderGarmentOptions(product) {
+  const category = $("#pf-category").value;
+  $("#pf-garment-options").hidden = category === 'fabric';
+  $("#pf-sizes-group").hidden = category !== 'fabric';
+  const options = product && product.category !== 'fabric' ? MisriCatalog.garmentOptions(product) : {
+    readyMadeSizes: ['Small', 'Medium', 'Large'], customEnabled: true, measurementType: category
+  };
+  const known = MisriCatalog.readyMadeSizes;
+  $("#pf-ready-sizes").innerHTML = known.map(size => `<label class="form-check"><input type="checkbox" value="${size}" ${options.readyMadeSizes.includes(size) ? 'checked' : ''}> ${size}</label>`).join('');
+  $("#pf-extra-sizes").value = options.readyMadeSizes.filter(size => !known.includes(size)).join(', ');
+  $("#pf-custom-enabled").checked = options.customEnabled;
+  $("#pf-measurement-type").innerHTML = Object.entries(MisriCatalog.measurementTypes).map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+  $("#pf-measurement-type").value = MisriCatalog.measurementTypes[options.measurementType] ? options.measurementType : 'suits';
+  $("#pf-measurement-type").disabled = !options.customEnabled;
+}
+function collectGarmentOptions() {
+  const selected = [...document.querySelectorAll('#pf-ready-sizes input:checked')].map(input => input.value);
+  const extra = $("#pf-extra-sizes").value.split(',').map(s => s.trim()).filter(s => s && !MisriCatalog.isCustomSize(s));
+  return { readyMadeSizes: [...new Set([...selected, ...extra])], customEnabled: $("#pf-custom-enabled").checked, measurementType: $("#pf-measurement-type").value };
+}
+
+function addStitchingAddonRow(addon = {}) {
+  const id = addon.id || 'extra-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  const row = document.createElement('div');
+  row.className = 'stitching-addon-row'; row.dataset.addonId = id;
+  row.innerHTML = `<label>Name<input data-addon-name value="${esc(addon.name || '')}" maxlength="100" placeholder="e.g. Karhai / Embroidery"></label><label>Price (Rs.)<input data-addon-price type="number" min="0" step="0.01" value="${Number(addon.price || 0)}"></label><label class="form-check"><input data-addon-enabled type="checkbox" ${addon.enabled ? 'checked' : ''}> Enabled</label><button type="button" class="btn-sm btn-outline-sm" data-remove-addon>Remove</button>`;
+  row.querySelector('[data-remove-addon]').addEventListener('click', () => row.remove());
+  document.querySelector('#stitching-addons-editor').appendChild(row);
+}
+function renderStitchingAddonsEditor(addons) {
+  document.querySelector('#stitching-addons-editor').innerHTML = '';
+  addons.forEach(addStitchingAddonRow);
+}
+async function saveStitchingAddons() {
+  const addons = [...document.querySelectorAll('.stitching-addon-row')].map(row => ({
+    id: row.dataset.addonId, name: row.querySelector('[data-addon-name]').value.trim(),
+    price: row.querySelector('[data-addon-price]').value, enabled: row.querySelector('[data-addon-enabled]').checked
+  }));
+  if (addons.some(a => !a.name || a.price === '' || !Number.isFinite(Number(a.price)) || Number(a.price) < 0)) {
+    showToast('Enter a name and a zero or positive price for every extra', 'error'); return;
+  }
+  showLoading(true);
+  try {
+    const data = await apiFetch('/api/admin/stitching-addons', { method: 'PUT', body: JSON.stringify({ addons, adminName }) });
+    renderStitchingAddonsEditor(data.addons); showToast('Stitching extras saved', 'success');
+  } catch (err) { showToast(err.message, 'error'); }
+  showLoading(false);
+}
+function renderOrderAddons(item) {
+  const addons = item.stitching_addons || [];
+  if (!addons.length) return '';
+  const count = item.meters ? 1 : Number(item.quantity || 1);
+  const total = addons.reduce((sum, a) => sum + Number(a.price || 0), 0) * count;
+  return `<div class="order-extras"><strong>Stitching extras</strong><br>${addons.map(a => `${esc(a.name)} — +${fmtMoney(a.price)} per garment`).join('<br>')}<br><strong>Extras total${count > 1 ? ` (${count} garments)` : ''}: ${fmtMoney(total)}</strong></div>`;
+}
+
+function applyAdminCategories(categories) {
+  MisriCatalog.applyCategories(categories);
+  CATEGORIES.splice(0, CATEGORIES.length, { value: 'fabric', label: 'Collections — Fabric' }, ...categories.stitching.map(c => ({value:c.id,label:'Stitching — '+c.name})));
+  const garmentSelect = $('#pf-category'), fabricSelect = $('#pf-fabric-type');
+  const previousGarment = garmentSelect.value, previousFabric = fabricSelect.value;
+  garmentSelect.replaceChildren(...CATEGORIES.map(c => new Option(c.label, c.value)));
+  fabricSelect.replaceChildren(...categories.collections.map(c => new Option(c.name, c.id)));
+  garmentSelect.value = CATEGORIES.some(c => c.value === previousGarment) ? previousGarment : 'fabric';
+  fabricSelect.value = categories.collections.some(c => c.id === previousFabric) ? previousFabric : categories.collections[0]?.id || '';
+}
+async function refreshAdminCategories() {
+  try {
+    const response = await fetch('/api/catalog-categories');
+    const data = await response.json();
+    if (!response.ok || !data.success) throw new Error('Category settings could not be loaded');
+    applyAdminCategories(data.categories);
+  } catch (err) { applyAdminCategories(MisriCatalog.categories); showToast(err.message, 'error'); }
+}
+async function loadCategoriesSection() {
+  $('#save-categories-btn').disabled = true;
+  showLoading(true);
+  try {
+    const data = await apiFetch('/api/admin/catalog-categories');
+    applyAdminCategories(data.categories);
+    for (const section of ['collections', 'stitching']) {
+      document.getElementById(section+'-categories-editor').replaceChildren();
+      data.categories[section].forEach(category => addCatalogCategoryRow(section, category, data.counts[section]?.[category.id] || 0));
+    }
+    $('#save-categories-btn').disabled = false;
+  } catch (err) { showToast(err.message, 'error'); }
+  showLoading(false);
+}
+function addCatalogCategoryRow(section, category = {}, count = 0) {
+  const row = document.createElement('div'); row.className = 'catalog-category-row';
+  row.dataset.categoryId = category.id || 'category-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7);
+  row.innerHTML = `<label>Category name<input data-category-name maxlength="80" value="${esc(category.name || '')}" placeholder="e.g. Silk or Sherwani"></label><label>Banner image<input data-category-image value="${esc(category.image || '')}" placeholder="pics/image.jpg or https://..."></label><label>Image position<input data-category-position value="${esc(category.position || 'center')}" placeholder="center"></label><div><small>${count} product${count === 1 ? '' : 's'}</small><button type="button" class="btn-sm btn-outline-sm" data-remove-category ${count ? 'disabled title="Move these products before removing this category"' : ''}>Remove</button></div>`;
+  row.querySelector('[data-remove-category]').addEventListener('click', () => row.remove());
+  document.getElementById(section+'-categories-editor').appendChild(row);
+}
+async function saveCatalogCategories() {
+  const categories = {};
+  for (const section of ['collections','stitching']) {
+    categories[section] = [...document.querySelectorAll('#'+section+'-categories-editor .catalog-category-row')].map(row => ({
+      id: row.dataset.categoryId, name: row.querySelector('[data-category-name]').value.trim(), image: row.querySelector('[data-category-image]').value.trim(), position: row.querySelector('[data-category-position]').value.trim() || 'center'
+    }));
+  }
+  if (Object.values(categories).some(list => !list.length || list.some(c => !c.name))) { showToast('Keep at least one named category in each section', 'error'); return; }
+  $('#save-categories-btn').disabled = true; showLoading(true);
+  try {
+    const data = await apiFetch('/api/admin/catalog-categories', {method:'PUT',body:JSON.stringify({categories,adminName})});
+    applyAdminCategories(data.categories); showToast('Categories saved', 'success');
+  } catch (err) { showToast(err.message, 'error'); }
+  $('#save-categories-btn').disabled = false; showLoading(false);
+}

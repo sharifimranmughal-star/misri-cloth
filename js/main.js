@@ -100,13 +100,55 @@ function highlightActiveNav() {
   });
 }
 
-function initShopPage() {
+// Category banners are configured beside the category inputs on each catalog page.
+// Collections prefer an available product photo; local fabric banners remain the fallback.
+function updateCatalogHero(category) {
+  const hero = document.querySelector('#shop-hero');
+  if (!hero) return;
+  const inputs = Array.from(document.querySelectorAll('input[name="category"]'));
+  const input = inputs.find(input => input.value === category) || inputs.find(input => input.value === 'all');
+  if (!input?.dataset.heroImage) return;
+  const fallback = input.dataset.heroImage;
+  const position = input.dataset.heroPosition || 'center';
+  const product = document.body.dataset.catalogSection === 'collections' && category !== 'all'
+    ? getProductsByCategory(category).find(product => product.image || product.images?.[0]) : null;
+  const source = product?.image || product?.images?.[0] || fallback;
+  const key = JSON.stringify([category, source, fallback, position]);
+  if (hero.dataset.heroRequest === key) return;
+  hero.dataset.heroRequest = key;
+  hero.style.backgroundImage = `url(${JSON.stringify(fallback)})`;
+  hero.style.backgroundPosition = position;
+  if (source === fallback) return;
+  const image = new Image();
+  image.onload = () => {
+    // Ignore a delayed image if the visitor has already selected another category.
+    if (hero.dataset.heroRequest !== key) return;
+    hero.style.backgroundImage = `url(${JSON.stringify(source)})`;
+    hero.style.backgroundPosition = 'center';
+  };
+  image.onerror = () => {}; // The local fallback is already visible.
+  image.src = source;
+}
+
+async function initShopPage() {
   const grid = document.querySelector("#shop-products");
   if (!grid) return;
 
+  await loadCatalogConfiguration();
   let filters = { category: "all", sort: "featured", search: "" };
+  const section = document.body.dataset.catalogSection;
+  const categoryHost = document.querySelector('#catalog-category-options');
+  function rebuildFilters() {
+    const categories = MisriCatalog.categories[section] || [];
+    if (!categories.some(category => category.id === filters.category)) filters.category = 'all';
+    const all = { id: 'all', name: section === 'collections' ? 'All Fabrics' : 'All Stitching', image: section === 'collections' ? 'pics/11.png' : 'pics/22.png', position: 'center' };
+    categoryHost.innerHTML = [all, ...categories].map(category => `<label><input type="radio" name="category" value="${escapeCatalogText(category.id)}" data-hero-image="${escapeCatalogText(category.image || all.image)}" data-hero-position="${escapeCatalogText(category.position || 'center')}" ${category.id === filters.category ? 'checked' : ''}><span>${escapeCatalogText(category.name)}</span></label>`).join('');
+  }
+  rebuildFilters();
+  window.rebuildCatalogFilters = () => { rebuildFilters(); render(); };
 
   function render() {
+    updateCatalogHero(filters.category);
     let items = getProductsByCategory(filters.category);
 
     // Apply search filter
@@ -114,8 +156,8 @@ function initShopPage() {
       const searchLower = filters.search.toLowerCase();
       items = items.filter(product =>
         product.name.toLowerCase().includes(searchLower) ||
-        product.description.toLowerCase().includes(searchLower) ||
-        product.category.toLowerCase().includes(searchLower)
+        String(product.description || "").toLowerCase().includes(searchLower) ||
+        getProductCategoryLabel(product).toLowerCase().includes(searchLower)
       );
     }
 
@@ -136,17 +178,18 @@ function initShopPage() {
         items = [...items].sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
     }
 
-    grid.innerHTML = items.map(productCardHTML).join("");
+    grid.innerHTML = items.length ? items.map(productCardHTML).join("") : '<div class="catalog-empty"><h3>No products in this selection yet</h3><p>Try another category or contact us for availability and custom orders.</p><a class="btn btn-outline" href="contact.html">Contact us</a></div>';
     const countEl = document.querySelector(".shop-count");
     if (countEl) countEl.textContent = `Showing ${items.length} products`;
   }
 
-  document.querySelectorAll('input[name="category"]').forEach(input => {
-    input.addEventListener("change", () => {
-      filters.category = input.value;
-      render();
-    });
+  categoryHost.addEventListener('change', event => {
+    if (event.target.name !== 'category') return;
+    filters.category = event.target.value;
+    render();
   });
+
+  window.renderCatalog = render;
 
   const sortSelect = document.querySelector("#sort-select");
   sortSelect?.addEventListener("change", () => {
@@ -159,7 +202,7 @@ function initShopPage() {
   const searchQuery = params.get("search");
   
   if (cat) {
-    const input = document.querySelector(`input[name="category"][value="${cat}"]`);
+    const input = Array.from(document.querySelectorAll('input[name="category"]')).find(input => input.value === cat);
     if (input) {
       input.checked = true;
       filters.category = cat;
@@ -168,6 +211,11 @@ function initShopPage() {
 
   if (searchQuery) {
     filters.search = searchQuery;
+    document.querySelectorAll('.catalog-switch a').forEach(link => {
+      const url = new URL(link.href);
+      url.searchParams.set('search', searchQuery);
+      link.href = url.href;
+    });
   }
 
   render();
@@ -181,6 +229,11 @@ function initProductPage() {
   const id = params.get("id");
   if (!id) return;
 
+  if (typeof productsApiLoadFinished !== "undefined" && (!productsApiLoadFinished || !tailoringSettingsLoadFinished)) {
+    setTimeout(() => initProductPage(), 100);
+    return;
+  }
+
   let product = getProductById(id);
 
   // If product not found and API hasn't loaded yet, wait and retry
@@ -193,7 +246,7 @@ function initProductPage() {
     if (!section.querySelector(".product-not-found-msg")) {
       section.insertAdjacentHTML(
         "afterbegin",
-        '<div class="container product-not-found-msg" style="padding:80px 0;text-align:center"><h2>Product not found</h2><a href="shop.html" class="btn btn-primary" style="margin-top:20px">Back to Shop</a></div>'
+        '<div class="container product-not-found-msg" style="padding:80px 0;text-align:center"><h2>Product not found</h2><a href="collections.html" class="btn btn-primary" style="margin-top:20px">Back to Collections</a></div>'
       );
     }
     return;
@@ -248,7 +301,7 @@ function initProductPage() {
   }
 
   if (title) title.textContent = product.name;
-  if (category) category.textContent = getCategoryLabel(product.category);
+  if (category) category.textContent = getProductCategoryLabel(product);
   if (rating) rating.innerHTML = `${renderStars(product.rating)} <span>${product.rating} (${product.reviews} reviews)</span>`;
 
   const isFabric = isFabricProduct(product);
@@ -256,18 +309,33 @@ function initProductPage() {
   const offersStitching = allowedStitchingTypes.length > 0;
   let selectedMeters = isFabric ? parseMetersFromSize(product.sizes[0]) : 1;
 
-  let wantsStitching = false;
-  let selectedTailoringType = allowedStitchingTypes[0] || TAILORING_TYPES[0]?.id || "shalwar-kameez";
+  const garmentOptions = isFabric ? null : MisriCatalog.garmentOptions(product);
+  const availableSizes = isFabric ? product.sizes : [...garmentOptions.readyMadeSizes, ...(garmentOptions.customEnabled ? ["Custom Stitching"] : [])];
+  let wantsStitching = !isFabric && MisriCatalog.isCustomSize(availableSizes[0]);
+  let selectedTailoringType = (!isFabric ? garmentOptions.measurementType : null) || allowedStitchingTypes[0] || TAILORING_TYPES[0]?.id || "shalwar-kameez";
 
+  const selectedAddonIds = new Set();
+  function selectedAddons() {
+    return wantsStitching && selectedTailoringType === 'shalwar-kameez'
+      ? STITCHING_ADDONS.filter(a => selectedAddonIds.has(a.id)).map(({id, name, price}) => ({id, name, price})) : [];
+  }
   function renderMeasurementPanel(typeId) {
     const panel = document.querySelector("#tailoring-measurements-wrap");
     if (!panel || typeof renderTailoringMeasurementsForm !== "function") return;
+    selectedAddonIds.clear();
     panel.innerHTML = renderTailoringMeasurementsForm(typeId);
+    if (typeId === 'shalwar-kameez' && STITCHING_ADDONS.length) {
+      panel.insertAdjacentHTML('beforeend', `<fieldset class="stitching-extras"><legend>Optional stitching extras</legend><p>Choose any, several, or none. Prices are per garment.</p>${STITCHING_ADDONS.map(a => `<label class="stitching-extra"><input type="checkbox" data-addon-id="${escapeCatalogText(a.id)}"><span>${escapeCatalogText(a.name)}</span><strong>+${formatPrice(a.price)}</strong></label>`).join('')}</fieldset>`);
+      panel.querySelectorAll('[data-addon-id]').forEach(input => input.addEventListener('change', () => {
+        if (input.checked) selectedAddonIds.add(input.dataset.addonId); else selectedAddonIds.delete(input.dataset.addonId);
+        updatePriceDisplay();
+      }));
+    }
     panel.hidden = !wantsStitching;
   }
 
   function getTailoringExtra() {
-    return wantsStitching ? getTailoringCharge(selectedTailoringType) : 0;
+    return wantsStitching && isFabric ? getTailoringCharge(selectedTailoringType) : 0;
   }
 
   function updatePriceDisplay() {
@@ -276,13 +344,18 @@ function initProductPage() {
       const perMeter = getPerMeterPrice(product);
       const fabricTotal = getFabricLineTotal(product, selectedMeters);
       const stitchingExtra = getTailoringExtra();
-      const grandTotal = fabricTotal + stitchingExtra;
+      const extras = getStitchingAddonsTotal(selectedAddons());
+      const grandTotal = fabricTotal + stitchingExtra + extras;
       price.innerHTML = `
         <span class="price-current">${formatPrice(perMeter)}/meter</span>
         <span class="fabric-total-label">Fabric (${selectedMeters}m): <strong>${formatPrice(fabricTotal)}</strong></span>
+        ${extras ? `<span class="fabric-tailoring-label">Optional extras: <strong>+${formatPrice(extras)}</strong></span>` : ""}
         ${stitchingExtra ? `<span class="fabric-tailoring-label">Stitching: <strong>+${formatPrice(stitchingExtra)}</strong></span>` : ""}
         <span class="fabric-grand-total">Total: <strong>${formatPrice(grandTotal)}</strong></span>
       `;
+    } else if (selectedAddons().length) {
+      const extras = getStitchingAddonsTotal(selectedAddons());
+      price.innerHTML = `<span>${formatPrice(Number(product.price) + extras)}</span><span class="fabric-total-label">Garment: ${formatPrice(product.price)} + extras: ${formatPrice(extras)} per garment</span>`;
     } else if (product.originalPrice) {
       price.innerHTML = `<span class="price-old">${formatPrice(product.originalPrice)}</span><span>${formatPrice(product.price)}</span>`;
     } else {
@@ -293,7 +366,7 @@ function initProductPage() {
 
   if (desc) desc.textContent = product.description;
 
-  let selectedSize = product.sizes[0];
+  let selectedSize = availableSizes[0];
   let selectedColor = product.colors[0];
   let qty = 1;
 
@@ -326,10 +399,15 @@ function initProductPage() {
   }
 
   const sizeLabel = document.querySelector(".option-group label");
-  if (sizeLabel && isFabric) sizeLabel.textContent = "Meters (min. 4)";
+  if (sizeLabel) sizeLabel.textContent = isFabric ? "Meters (min. 4)" : "Ready-made size or custom stitching";
+  if (!isFabric && garmentOptions.customEnabled) {
+    const sizeGroup = sizes?.closest('.option-group');
+    sizeGroup?.insertAdjacentHTML('afterend', '<div class="option-group garment-measurements" id="tailoring-measurements-wrap" hidden></div>');
+    renderMeasurementPanel(selectedTailoringType);
+  }
 
   if (sizes) {
-    sizes.innerHTML = product.sizes.map((s, i) =>
+    sizes.innerHTML = availableSizes.map((s, i) =>
       `<button type="button" class="size-btn ${i === 0 ? "active" : ""}" data-size="${s}">${s}</button>`
     ).join("");
     sizes.addEventListener("click", e => {
@@ -337,6 +415,12 @@ function initProductPage() {
       sizes.querySelectorAll(".size-btn").forEach(b => b.classList.remove("active"));
       e.target.classList.add("active");
       selectedSize = e.target.dataset.size;
+      if (!isFabric) {
+        wantsStitching = MisriCatalog.isCustomSize(selectedSize);
+        const panel = document.querySelector('#tailoring-measurements-wrap');
+        if (panel) panel.hidden = !wantsStitching;
+        updatePriceDisplay();
+      }
       if (isFabric) {
         selectedMeters = parseMetersFromSize(selectedSize);
         updatePriceDisplay();
@@ -462,6 +546,7 @@ function initProductPage() {
           enabled: wantsStitching,
           type: selectedTailoringType,
           charge: getTailoringCharge(selectedTailoringType),
+          addons: selectedAddons(),
           measurements
         });
         return;
@@ -473,7 +558,16 @@ function initProductPage() {
         measurements: null
       });
     } else {
-      addToCart(product.id, selectedSize, selectedColor, qty);
+      if (wantsStitching) {
+        const measurements = collectTailoringMeasurements();
+        const validation = validateTailoringMeasurements(selectedTailoringType, measurements);
+        if (!validation.valid) { showToast(validation.message); return; }
+        addToCart(product.id, selectedSize, selectedColor, qty, {
+          enabled: true, type: selectedTailoringType, charge: 0, measurements, addons: selectedAddons()
+        });
+      } else {
+        addToCart(product.id, selectedSize, selectedColor, qty);
+      }
     }
   });
 
@@ -625,8 +719,8 @@ function initSearchModal() {
     const allProducts = getAllProducts();
     const filtered = allProducts.filter(product =>
       product.name.toLowerCase().includes(query.toLowerCase()) ||
-      product.description.toLowerCase().includes(query.toLowerCase()) ||
-      product.category.toLowerCase().includes(query.toLowerCase())
+      String(product.description || "").toLowerCase().includes(query.toLowerCase()) ||
+      getProductCategoryLabel(product).toLowerCase().includes(query.toLowerCase())
     );
 
     if (searchResults) {
@@ -638,7 +732,7 @@ function initSearchModal() {
             <img src="${product.image}" alt="${product.name}" class="search-result-image">
             <div class="search-result-info">
               <div class="search-result-title">${product.name}</div>
-              <div class="search-result-category">${product.category}</div>
+              <div class="search-result-category">${getProductCategoryLabel(product)}</div>
               <div class="search-result-price">${formatPrice(product.price)}</div>
             </div>
           </div>
@@ -666,7 +760,9 @@ function initSearchModal() {
     const query = searchInput?.value || "";
     if (query.trim()) {
       closeSearch();
-      window.location.href = `shop.html?search=${encodeURIComponent(query)}`;
+      const match = PRODUCTS.find(product => [product.name, product.description, getProductCategoryLabel(product)].some(text => String(text || '').toLowerCase().includes(query.toLowerCase())));
+      const destination = match ? (isFabricProduct(match) ? 'collections' : 'stitching') : (document.body.dataset.catalogSection || 'collections');
+      window.location.href = `${destination}.html?search=${encodeURIComponent(query)}`;
     }
   });
 
@@ -679,6 +775,10 @@ function initSearchModal() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  loadCatalogConfiguration().then(() => {
+    updateCatalogNavigation();
+    refreshProductDisplays();
+  });
   initThemeToggle();
   initMobileNav();
   initCartDrawer();
@@ -694,3 +794,21 @@ document.addEventListener("DOMContentLoaded", () => {
   initSearchModal();
 });
 
+
+// Keep existing category links accurate when names change or a category is removed.
+function updateCatalogNavigation() {
+  document.querySelectorAll('a[href*="stitching.html?category="], a[href*="collections.html?category="]').forEach(link => {
+    const url = new URL(link.href, window.location.href);
+    const section = url.pathname.endsWith('stitching.html') ? 'stitching' : 'collections';
+    const category = MisriCatalog.categories[section].find(category => category.id === url.searchParams.get('category'));
+    const heading = link.querySelector('h3');
+    if (category) {
+      if (heading) heading.textContent = category.name;
+      else if (!link.children.length) link.textContent = category.name;
+    } else {
+      link.href = section + '.html';
+      if (heading) heading.textContent = section === 'collections' ? 'Collections' : 'Stitching';
+      else if (!link.children.length) link.textContent = section === 'collections' ? 'Collections' : 'Stitching';
+    }
+  });
+}

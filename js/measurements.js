@@ -79,10 +79,11 @@ function collectTailoringMeasurements(container) {
 function validateTailoringMeasurements(typeId, measurements, container) {
   const fields = getMeasurementFields(typeId);
   const root = container || document.querySelector("#tailoring-measurements");
+  if (!fields.length) return { valid: false, message: "Measurements could not be loaded. Please reload the page and try again." };
 
   for (const field of fields) {
     const value = measurements[field.key];
-    if (field.required) {
+    if (field.required || (value !== undefined && value !== null && value !== "")) {
       if (value === undefined || value === null || value === "") {
         const input = root?.querySelector(`[data-measure-key="${field.key}"]`);
         input?.focus();

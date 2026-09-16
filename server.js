@@ -1,3 +1,4 @@
+const { validateAddonOrderItem } = require("./lib/stitching-addons");
 require('dotenv').config();
 const express = require("express");
 const fs = require("fs");
@@ -12,6 +13,7 @@ const {
   calcOrderTotal,
   hasTrackedStock
 } = require("./lib/order-utils");
+const { validateGarmentOrderItem } = require("./lib/garment-orders");
 const { formatMeasurementsBlock } = require("./lib/measurement-fields");
 
 const app = express();
@@ -133,6 +135,7 @@ async function initDb() {
   await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tailoring_type VARCHAR(50);`);
   await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tailoring_charge NUMERIC(12,2) DEFAULT 0;`);
   await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tailoring_measurements JSONB;`);
+  await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS stitching_addons JSONB;`);
 
   await dbPool.query(`
     CREATE TABLE IF NOT EXISTS contact_messages (
@@ -181,8 +184,8 @@ async function saveOrder(order) {
     await dbPool.query(
       `INSERT INTO order_items
        (order_id, product_id, product_name, size_label, color, meters, unit_price, quantity, line_total,
-        tailoring_enabled, tailoring_type, tailoring_charge, tailoring_measurements)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        tailoring_enabled, tailoring_type, tailoring_charge, tailoring_measurements, stitching_addons)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       [
         orderId,
         item.product_id,
@@ -196,7 +199,8 @@ async function saveOrder(order) {
         Boolean(item.tailoring_enabled || item.tailoringEnabled),
         item.tailoring_type || item.tailoringType || null,
         Number(item.tailoring_charge ?? item.tailoringCharge ?? 0),
-        item.tailoring_measurements || item.tailoringMeasurements || null
+        item.tailoring_measurements || item.tailoringMeasurements || null,
+        JSON.stringify(item.stitching_addons || [])
       ]
     );
   }
@@ -234,7 +238,7 @@ async function getOrders() {
 
   const itemsResult = await dbPool.query(
     `SELECT order_id, product_id, product_name, size_label, color, meters, unit_price, quantity, line_total,
-            tailoring_enabled, tailoring_type, tailoring_charge, tailoring_measurements
+            tailoring_enabled, tailoring_type, tailoring_charge, tailoring_measurements, stitching_addons
      FROM order_items`
   );
 
@@ -256,7 +260,8 @@ async function getOrders() {
       tailoring_enabled: Boolean(row.tailoring_enabled),
       tailoring_type: row.tailoring_type || null,
       tailoring_charge: Number(row.tailoring_charge || 0),
-      tailoring_measurements: row.tailoring_measurements || null
+      tailoring_measurements: row.tailoring_measurements || null,
+      stitching_addons: row.stitching_addons || []
     };
     if (!itemsByOrder.has(row.order_id)) itemsByOrder.set(row.order_id, []);
     itemsByOrder.get(row.order_id).push(normalizedItem);
@@ -368,11 +373,18 @@ app.post("/api/submit_order", async (req, res) => {
       return res.status(400).json({ success: false, message: "Cart is empty" });
     }
 
+    const [availableAddons, currentCharges] = await Promise.all([adminApi.getStitchingAddons(), adminApi.getTailoringCharges()]);
     for (const item of items) {
       const product = normalizeProductStock(await adminApi.getProductById(item.product_id, false));
       if (!product) {
         return res.status(400).json({ success: false, message: `${item.product_name} is no longer available` });
       }
+      const stitchingValidation = validateGarmentOrderItem(product, item);
+      if (!stitchingValidation.valid) {
+        return res.status(400).json({ success: false, message: stitchingValidation.message });
+      }
+      const addonValidation = validateAddonOrderItem(product, item, availableAddons, currentCharges);
+      if (!addonValidation.valid) return res.status(400).json({ success: false, message: addonValidation.message });
       const needed = item.meters ? Math.ceil(item.meters) : (item.quantity || 1);
       const availableStock = getColorStock(product, item.color);
 
@@ -385,6 +397,12 @@ app.post("/api/submit_order", async (req, res) => {
       }
     }
 
+    if (items.some(item => item.stitching_addons?.length)) {
+      const subtotal = items.reduce((sum, item) => sum + Number(item.line_total), 0);
+      if (!Number.isFinite(Number(total)) || Math.abs(Number(total) - calcOrderTotal(subtotal)) > 0.01) {
+        return res.status(400).json({ success: false, message: 'Order total does not match your stitching options. Please refresh your cart' });
+      }
+    }
     const orderRef = generateOrderRef();
     const order = {
       id: Date.now(),
@@ -449,6 +467,9 @@ app.post("/api/submit_order", async (req, res) => {
           emailBody += `${item.product_name} — ${item.meters}m @ Rs.${item.unit_price}/m${tailoringNote} = Rs.${item.line_total}\n`;
         } else {
           emailBody += `${item.product_name} — ${item.size}, ${item.color} x${item.quantity}${tailoringNote} = Rs.${item.line_total}\n`;
+        }
+        if (item.stitching_addons?.length) {
+          emailBody += `  Extras: ${item.stitching_addons.map(a => `${a.name} (+Rs.${a.price} per garment)`).join(', ')}\n`;
         }
         const measurements = item.tailoring_measurements || item.tailoringMeasurements;
         if (tailoringEnabled && measurements) {

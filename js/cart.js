@@ -27,9 +27,10 @@ function buildMeasurementsKey(measurements) {
     .join("|") || "none";
 }
 
-function buildCartKey(productId, size, color, tailoringType = null, measurements = null) {
+function buildCartKey(productId, size, color, tailoringType = null, measurements = null, addons = []) {
+  const addonKey = addons.length ? "-extras:" + addons.map(a => `${a.id}:${a.price}`).sort().join("|") : "";
   const measureKey = tailoringType ? buildMeasurementsKey(measurements) : "none";
-  return `${productId}-${size}-${color}-${tailoringType || "none"}-${measureKey}`;
+  return `${productId}-${size}-${color}-${tailoringType || "none"}-${measureKey}${addonKey}`;
 }
 
 function addToCart(productId, size, color, qty = 1, tailoring = {}) {
@@ -47,15 +48,28 @@ function addToCart(productId, size, color, qty = 1, tailoring = {}) {
   const tailoringEnabled = Boolean(tailoring.enabled);
   const allowedTypes = getProductStitchingTypes(product);
   if (tailoringEnabled && (!allowedTypes.length || !allowedTypes.includes(tailoring.type))) {
-    showToast("Custom stitching is not available for this fabric");
+    showToast("Custom stitching is not available for this product");
     return;
   }
+  if (!isFabricProduct(product)) {
+    const options = MisriCatalog.garmentOptions(product);
+    if (tailoringEnabled !== MisriCatalog.isCustomSize(selectedSize) || (!tailoringEnabled && !options.readyMadeSizes.includes(selectedSize))) {
+      showToast("Please choose an available size or custom stitching on the product page");
+      return;
+    }
+  }
+  if (tailoringEnabled) {
+    const validation = validateTailoringMeasurements(tailoring.type, tailoring.measurements || {});
+    if (!validation.valid) { showToast(validation.message); return; }
+  }
   const tailoringType = tailoringEnabled ? (tailoring.type || null) : null;
-  const tailoringCharge = tailoringEnabled ? Number(tailoring.charge || getTailoringCharge(tailoringType)) : 0;
+  const tailoringCharge = tailoringEnabled && isFabricProduct(product) ? Number(tailoring.charge ?? getTailoringCharge(tailoringType)) : 0;
   const tailoringMeasurements = tailoringEnabled && tailoring.measurements ? tailoring.measurements : null;
 
+  const stitchingAddons = tailoringEnabled && tailoringType === 'shalwar-kameez'
+    ? STITCHING_ADDONS.filter(a => (tailoring.addons || []).some(selected => selected.id === a.id)).map(({id, name, price}) => ({id, name, price})) : [];
   const cart = getCart();
-  const key = buildCartKey(productId, selectedSize, selectedColor, tailoringType, tailoringMeasurements);
+  const key = buildCartKey(productId, selectedSize, selectedColor, tailoringType, tailoringMeasurements, stitchingAddons);
   const existing = cart.find(item => item.key === key);
 
   console.log('Adding to cart:', { productId, productName: product.name, productPrice: product.price, selectedSize, selectedColor });
@@ -83,6 +97,7 @@ function addToCart(productId, size, color, qty = 1, tailoring = {}) {
       existing.tailoringType = tailoringType;
       existing.tailoringCharge = tailoringCharge;
       existing.tailoringMeasurements = tailoringMeasurements;
+      existing.stitchingAddons = stitchingAddons;
     } else {
       cart.push({
         key,
@@ -98,7 +113,8 @@ function addToCart(productId, size, color, qty = 1, tailoring = {}) {
         tailoringEnabled,
         tailoringType,
         tailoringCharge,
-        tailoringMeasurements
+        tailoringMeasurements,
+        stitchingAddons
       });
     }
     const totalLabel = formatPrice(getLineTotal(cart.find(i => i.key === key)));
@@ -135,7 +151,8 @@ function addToCart(productId, size, color, qty = 1, tailoring = {}) {
       tailoringEnabled,
       tailoringType,
       tailoringCharge,
-      tailoringMeasurements
+      tailoringMeasurements,
+      stitchingAddons
     };
     console.log('Cart item being added:', cartItem);
     cart.push(cartItem);
@@ -298,11 +315,12 @@ function renderCartDrawer() {
       ? formatMeasurementsSummary(item.tailoringType, item.tailoringMeasurements)
       : "";
     const tailoringLine = item.tailoringEnabled && item.tailoringType
-      ? `<br><small class="cart-tailoring-note"><i class="fas fa-cut"></i> Custom ${getTailoringLabel(item.tailoringType)} stitching (+${formatPrice(item.tailoringCharge || 0)})</small>${measureSummary ? `<br><small class="cart-measurements-note"><i class="fas fa-ruler"></i> ${measureSummary}</small>` : ""}`
+      ? `<br><small class="cart-tailoring-note"><i class="fas fa-cut"></i> Custom ${getTailoringLabel(item.tailoringType)} stitching ${item.isFabric ? `(+${formatPrice(item.tailoringCharge || 0)})` : "(included)"}</small>${measureSummary ? `<br><small class="cart-measurements-note"><i class="fas fa-ruler"></i> ${measureSummary}</small>` : ""}`
       : "";
+    const extrasLine = item.stitchingAddons?.length ? `<br><small class="cart-extras-note">Extras: ${item.stitchingAddons.map(a => `${escapeCatalogText(a.name)} (+${formatPrice(a.price)})`).join(', ')} per garment</small>` : '';
     const detailLine = item.isFabric
-      ? `${item.meters} meter${item.meters > 1 ? "s" : ""} · ${item.color} · ${formatPrice(item.unitPrice)}/m${tailoringLine}`
-      : `${item.size} · ${item.color}${tailoringLine}`;
+      ? `${item.meters} meter${item.meters > 1 ? "s" : ""} · ${item.color} · ${formatPrice(item.unitPrice)}/m${tailoringLine}${extrasLine}`
+      : `${item.size} · ${item.color}${tailoringLine}${extrasLine}`;
 
     const qtyControls = item.isFabric
       ? `<div class="qty-control">
@@ -527,7 +545,8 @@ async function submitOrder(e) {
       tailoring_enabled: Boolean(item.tailoringEnabled),
       tailoring_type: item.tailoringType || null,
       tailoring_charge: Number(item.tailoringCharge || 0),
-      tailoring_measurements: item.tailoringMeasurements || null
+      tailoring_measurements: item.tailoringMeasurements || null,
+      stitching_addons: item.stitchingAddons || []
     }))
   };
 
@@ -609,8 +628,8 @@ function initCartDrawer() {
       const product = getProductById(id);
       if (product && isFabricProduct(product)) {
         await addToCart(id, "4 Meter", product.colors[0], 1);
-      } else {
-        await addToCart(id);
+      } else if (product) {
+        window.location.href = `product.html?id=${id}`;
       }
     }
   });

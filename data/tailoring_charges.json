@@ -5,5 +5,25 @@
     "prince-coat": 6000,
     "waistcoats": 3500
   },
-  "updated_at": "2026-09-13T18:15:29.123Z"
+  "updated_at": "2026-09-16T14:20:01.780Z",
+  "addons": [
+    {
+      "id": "karhai",
+      "name": "Karhai / Embroidery",
+      "price": 200,
+      "enabled": true
+    },
+    {
+      "id": "double-stitch",
+      "name": "Double Stitching",
+      "price": 100,
+      "enabled": true
+    },
+    {
+      "id": "extra-mu46stmw-2eopyo",
+      "name": "Fancy Buttons",
+      "price": 100,
+      "enabled": true
+    }
+  ]
 }

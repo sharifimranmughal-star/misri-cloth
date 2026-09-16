@@ -2,7 +2,8 @@ const CATEGORY_LABELS = {
   fabric: "Men's Fabric",
   suits: "Suits",
   "shalwar-kameez": "Shalwar Kameez",
-  coats: "Coats",
+  coats: "Coats & Blazers",
+  "prince-coat": "Prince Coat",
   waistcoats: "Waistcoats"
 };
 
@@ -21,6 +22,10 @@ let TAILORING_TYPES = [
   { id: "waistcoats", label: "Waistcoat" }
 ];
 let tailoringChargesLoaded = false;
+let tailoringSettingsLoadFinished = false;
+let STITCHING_ADDONS = [];
+function escapeCatalogText(value) { return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function getStitchingAddonsTotal(addons) { return (addons || []).reduce((sum, a) => sum + Number(a.price || 0), 0); }
 
 function getAllProducts() {
   return PRODUCTS;
@@ -228,7 +233,7 @@ const PRODUCTS = [
 ];
 
 function getCategoryLabel(category) {
-  return CATEGORY_LABELS[category] || category;
+  return MisriCatalog.categoryLabel("stitching", category) || CATEGORY_LABELS[category] || category;
 }
 
 function getFeaturedProducts() {
@@ -236,8 +241,16 @@ function getFeaturedProducts() {
 }
 
 function getProductsByCategory(category) {
-  if (category === "all") return PRODUCTS;
-  return PRODUCTS.filter(p => p.category === category);
+  const section = typeof document !== 'undefined' ? document.body?.dataset.catalogSection : '';
+  let products = PRODUCTS;
+  if (section === 'collections') products = products.filter(isFabricProduct);
+  if (section === 'stitching') products = products.filter(p => !isFabricProduct(p));
+  if (category === 'all') return products;
+  if (section === 'collections') return products.filter(p => MisriCatalog.fabricType(p) === category);
+  return products.filter(p => p.category === category);
+}
+function getProductCategoryLabel(product) {
+  return isFabricProduct(product) ? MisriCatalog.categoryLabel("collections", MisriCatalog.fabricType(product)) : getCategoryLabel(product.category);
 }
 
 function isFabricProduct(product) {
@@ -363,7 +376,7 @@ function getFabricLineTotal(product, meters) {
 }
 
 function getTailoringLabel(typeId) {
-  return TAILORING_TYPES.find((t) => t.id === typeId)?.label || typeId || "";
+  return TAILORING_TYPES.find((t) => t.id === typeId)?.label || MisriCatalog.measurementTypes[typeId] || typeId || "";
 }
 
 function getTailoringCharge(typeId) {
@@ -372,7 +385,11 @@ function getTailoringCharge(typeId) {
 }
 
 function getProductStitchingTypes(product) {
-  if (!product || product.category !== "fabric") return [];
+  if (!product) return [];
+  if (!isFabricProduct(product)) {
+    const options = MisriCatalog.garmentOptions(product);
+    return options.customEnabled ? [options.measurementType] : [];
+  }
   const validIds = TAILORING_TYPES.map((type) => type.id);
   const hasExplicitEnabled = typeof product.stitchingEnabled === "boolean";
   const hasExplicitTypes = Array.isArray(product.stitchingTypes);
@@ -397,7 +414,8 @@ function productOffersStitching(product) {
 function getLineTotal(item) {
   const fabricTotal = item.isFabric ? item.unitPrice * item.meters : item.unitPrice * item.qty;
   const tailoringTotal = item.tailoringEnabled ? Number(item.tailoringCharge || 0) : 0;
-  return fabricTotal + tailoringTotal;
+  const addonsTotal = item.tailoringEnabled ? getStitchingAddonsTotal(item.stitchingAddons) * (item.isFabric ? 1 : item.qty) : 0;
+  return fabricTotal + tailoringTotal + addonsTotal;
 }
 
 async function loadTailoringChargesFromAPI() {
@@ -409,10 +427,13 @@ async function loadTailoringChargesFromAPI() {
       if (Array.isArray(data.types) && data.types.length) {
         TAILORING_TYPES = data.types;
       }
+      STITCHING_ADDONS = Array.isArray(data.addons) ? data.addons.filter(a => a.enabled) : [];
       tailoringChargesLoaded = true;
     }
   } catch (err) {
     console.error("Error loading tailoring charges:", err);
+  } finally {
+    tailoringSettingsLoadFinished = true;
   }
 }
 
@@ -450,13 +471,13 @@ function productCardHTML(product) {
         </a>
       </div>
       <div class="product-info">
-        <span class="product-category">${getCategoryLabel(product.category)}</span>
+        <span class="product-category">${getProductCategoryLabel(product)}</span>
         <h3><a href="product.html?id=${product.id}">${product.name}</a></h3>
         <div class="product-rating">${renderStars(product.rating)} <span>(${product.reviews})</span></div>
         <div class="product-price">${priceHTML}</div>
         <div class="product-stock ${stockClass}">${stockText}</div>
         <button class="btn btn-primary btn-add-cart" data-id="${product.id}" ${isOutOfStock ? 'disabled' : ''}>
-          ${isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
+          ${isOutOfStock ? 'Out of Stock' : (isFabricProduct(product) ? 'Add to Cart' : 'Choose Size / Custom Stitching')}
         </button>
       </div>
     </div>
@@ -466,6 +487,20 @@ function productCardHTML(product) {
 // Real-time updates via SSE
 let eventSource = null;
 let productsLoadedFromApi = false;
+let productsApiLoadFinished = false;
+let catalogConfigurationPromise = null;
+async function loadCatalogConfiguration(force = false) {
+  if (catalogConfigurationPromise && !force) return catalogConfigurationPromise;
+  catalogConfigurationPromise = (async () => {
+    try {
+      const response = await fetch('/api/catalog-categories');
+      const data = await response.json();
+      if (response.ok && data.success) MisriCatalog.applyCategories(data.categories);
+    } catch (err) { console.error('Category settings unavailable:', err); }
+    return MisriCatalog.categories;
+  })();
+  return catalogConfigurationPromise;
+}
 
 async function loadProductsFromAPI() {
   try {
@@ -499,6 +534,8 @@ async function loadProductsFromAPI() {
     }
   } catch (err) {
     console.error('Error loading products from API:', err);
+  } finally {
+    productsApiLoadFinished = true;
   }
 }
 
@@ -536,6 +573,13 @@ function connectToEvents() {
 function handleProductEvent(event) {
   console.log('Handling product event:', event.type);
   switch(event.type) {
+    case 'categories_updated':
+      loadCatalogConfiguration(true).then(() => {
+        if (typeof window.rebuildCatalogFilters === 'function') window.rebuildCatalogFilters();
+        if (typeof updateCatalogNavigation === 'function') updateCatalogNavigation();
+        refreshProductDisplays();
+      });
+      break;
     case 'product_updated':
       loadProductsFromAPI(); // Reload all products from API
       break;
@@ -621,19 +665,14 @@ function refreshProductDisplays() {
   }
   
   const shopGrid = document.querySelector("#shop-products");
-  if (shopGrid) {
-    // Re-render shop page based on current filters
-    const activeCategory = document.querySelector('input[name="category"]:checked')?.value || "all";
-    const products = getProductsByCategory(activeCategory);
-    shopGrid.innerHTML = products.map(productCardHTML).join("");
-    const countEl = document.querySelector(".shop-count");
-    if (countEl) countEl.textContent = `Showing ${products.length} products`;
-    console.log('Shop products refreshed');
-  }
+  if (shopGrid && typeof window.renderCatalog === 'function') window.renderCatalog();
 
   const productId = new URLSearchParams(window.location.search).get("id");
   if (productId) {
     if (typeof initProductPage === "function") initProductPage();
+    const currentProduct = getProductById(productId);
+    const categoryLabel = document.querySelector('#product-category');
+    if (currentProduct && categoryLabel) categoryLabel.textContent = getProductCategoryLabel(currentProduct);
     updateProductDetailStock(productId);
   }
 }

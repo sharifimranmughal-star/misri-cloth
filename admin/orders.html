@@ -52,6 +52,7 @@
     </div>
     <ul class="admin-nav">
       <li><button data-section="dashboard" class="active" onclick="showSection('dashboard')">📊 Dashboard</button></li>
+      <li><button data-section="categories" onclick="showSection('categories')">📂 Categories</button></li>
       <li><button data-section="products" onclick="showSection('products')">📦 Products</button></li>
       <li><button data-section="orders" onclick="showSection('orders')">🛒 Orders</button></li>
       <li><button data-section="customers" onclick="showSection('customers')">👥 Customers</button></li>
@@ -181,6 +182,17 @@
       </div>
     </section>
 
+    <section id="section-categories" class="admin-section">
+      <div class="panel">
+        <div class="panel-header"><h2>Collections &amp; Stitching Categories</h2><button class="btn-sm btn-primary-sm" id="save-categories-btn" onclick="saveCatalogCategories()" disabled>Save Categories</button></div>
+        <p class="sub">Add, rename or remove categories. Move all products, including inactive products, before removing a category. Save to apply your changes.</p>
+        <p class="sub">Banner image is optional: use a pics/ or uploads/ path, or an HTTPS image URL. Collections may use a matching product photo. Existing measurement forms remain selectable when adding stitching products.</p>
+        <h3>Collections</h3><div id="collections-categories-editor"></div>
+        <button class="btn-sm btn-outline-sm" onclick="addCatalogCategoryRow('collections')">+ Add Collection Category</button>
+        <h3 style="margin-top:24px">Stitching</h3><div id="stitching-categories-editor"></div>
+        <button class="btn-sm btn-outline-sm" onclick="addCatalogCategoryRow('stitching')">+ Add Stitching Category</button>
+      </div>
+    </section>
     <!-- Tailoring -->
     <section id="section-tailoring" class="admin-section">
       <div class="panel">
@@ -190,6 +202,12 @@
         </div>
         <p class="sub" style="margin-bottom:16px">Set extra stitching charges for each garment type. Customers see these prices on fabric product pages.</p>
         <div id="tailoring-charges-form" class="tailoring-charges-form"></div>
+      </div>
+      <div class="panel" style="margin-top:20px">
+        <div class="panel-header"><h2>Shalwar Kameez — Optional Extras</h2><button class="btn-sm btn-primary-sm" onclick="saveStitchingAddons()">Save Extras</button></div>
+        <p class="sub">Add karhai, double stitching, or your own extras. Set each price and enable it to show customers. Customers may select none, one, or several. Prices apply per garment to custom Shalwar Kameez, including fabric-with-stitching orders.</p>
+        <div id="stitching-addons-editor"></div>
+        <button class="btn-sm btn-outline-sm" onclick="addStitchingAddonRow()">+ Add Extra</button>
       </div>
       <div class="panel" style="margin-top:20px">
         <div class="panel-header">
@@ -214,14 +232,15 @@
         <div class="form-group full"><label>Description</label><textarea id="pf-desc"></textarea></div>
         <div class="form-group"><label>Price (Rs.) *</label><input id="pf-price" type="number" min="0" required></div>
         <div class="form-group"><label>Original Price</label><input id="pf-original" type="number" min="0"></div>
-        <div class="form-group"><label>Category</label><select id="pf-category"></select></div>
+        <div class="form-group"><label for="pf-category">Website section / garment</label><select id="pf-category"></select></div>
+        <div class="form-group" id="pf-fabric-type-group"><label for="pf-fabric-type">Collections fabric category</label><select id="pf-fabric-type"></select></div>
         <div class="form-group"><label>SKU</label><input id="pf-sku" placeholder="Optional"></div>
         <div class="form-group"><label>Total Stock</label><input id="pf-stock" type="number" min="0" value="0"></div>
         <div class="form-group"><label>Status</label><select id="pf-status"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
         <div class="form-group"><label>Badge</label><select id="pf-badge"><option value="">None</option><option value="sale">Sale</option><option value="new">New</option><option value="bestseller">Best Seller</option><option value="premium">Premium</option></select></div>
         <div class="form-group"><label>Rating</label><input id="pf-rating" type="number" min="0" max="5" step="0.1" value="4.5"></div>
         <div class="form-group"><label>Reviews Count</label><input id="pf-reviews" type="number" min="0" value="0"></div>
-        <div class="form-group"><label>Sizes (comma-separated)</label><input id="pf-sizes" placeholder="Custom Measurement"></div>
+        <div class="form-group" id="pf-sizes-group"><label>Fabric lengths (comma-separated)</label><input id="pf-sizes" placeholder="Custom Measurement"></div>
         <div class="form-group full">
           <label>Colors &amp; Stock</label>
           <div id="color-stock-rows" class="color-stock-rows"></div>
@@ -234,6 +253,18 @@
           <label class="form-check"><input id="pf-new" type="checkbox"> Mark as New</label>
           <label class="form-check"><input id="pf-visible" type="checkbox" checked> Visible on Store</label>
         </div>
+        <fieldset class="form-group full garment-options" id="pf-garment-options" hidden>
+          <legend>Stitching product options</legend>
+          <p class="field-hint">Select the ready-made sizes you sell, custom stitching, or both. The listed product price applies to either choice.</p>
+          <label>Ready-made sizes</label>
+          <div id="pf-ready-sizes" class="stitching-type-checks"></div>
+          <label for="pf-extra-sizes">Other ready-made sizes (comma-separated, optional)</label>
+          <input id="pf-extra-sizes" placeholder="e.g. 38, 40, 42">
+          <label class="form-check"><input id="pf-custom-enabled" type="checkbox"> Offer custom stitching with customer measurements</label>
+          <label for="pf-measurement-type">Custom stitching measurement form</label>
+          <select id="pf-measurement-type"></select>
+          <p class="field-hint">Choose Suit, Shalwar Kameez / Kurta, Waistcoat, Prince Coat, or Coat / Blazer. Measurements are attached to the order. Custom stitching is included in this product’s price.</p>
+        </fieldset>
         <div class="form-group full" id="pf-stitching-wrap">
           <label class="form-check"><input id="pf-stitching" type="checkbox"> Offer custom stitching on this fabric</label>
           <p class="field-hint">Customers can add stitching when buying this cloth and pick from the types you enable below.</p>
@@ -258,6 +289,7 @@
 
 <div id="loading-overlay" class="loading-overlay"><div class="spinner"></div></div>
 
-<script src="admin.js"></script>
+<script src="../js/catalog.js"></script>
+  <script src="admin.js"></script>
 </body>
 </html>

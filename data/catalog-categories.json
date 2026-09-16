@@ -1,0 +1,60 @@
+{
+  "collections": [
+    {
+      "id": "linen",
+      "name": "Linen",
+      "image": "pics/11.png",
+      "position": "left center"
+    },
+    {
+      "id": "category-mu49j101-g2f28",
+      "name": "Silk",
+      "image": "pics/11.png",
+      "position": "left center"
+    },
+    {
+      "id": "category-mu4clkq5-edt9v",
+      "name": "Cotton",
+      "image": "pics/11.png",
+      "position": "center"
+    },
+    {
+      "id": "category-mu4clyve-s097s",
+      "name": "Wash And Wear",
+      "image": "pics/11.png",
+      "position": "center"
+    }
+  ],
+  "stitching": [
+    {
+      "id": "suits",
+      "name": "Suits (2, 3 & 4 Piece)",
+      "image": "pics/13.png",
+      "position": "center"
+    },
+    {
+      "id": "shalwar-kameez",
+      "name": "Shalwar Kameez & Kurtas",
+      "image": "pics/12.jpg",
+      "position": "center"
+    },
+    {
+      "id": "waistcoats",
+      "name": "Waistcoats",
+      "image": "pics/15.png",
+      "position": "center"
+    },
+    {
+      "id": "prince-coat",
+      "name": "Prince Coat",
+      "image": "pics/29.png",
+      "position": "center"
+    },
+    {
+      "id": "coats",
+      "name": "Coats & Blazers",
+      "image": "pics/22.png",
+      "position": "center"
+    }
+  ]
+}
