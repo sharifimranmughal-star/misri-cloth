@@ -1,7 +1,7 @@
 {
   "name": "MISRI CLOTH",
   "short_name": "MISRI",
-  "description": "Premium men's tailoring in Chakwal — suits, shalwar kameez, coats, fabrics",
+  "description": "Premium men's tailoring in Chakwal \u2014 suits, shalwar kameez, coats, fabrics",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#faf8f5",
@@ -9,10 +9,16 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=192&h=192&fit=crop",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/jpeg",
-      "purpose": "any maskable"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

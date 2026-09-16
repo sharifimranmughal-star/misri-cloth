@@ -45,6 +45,10 @@ if ($loggedIn) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="icon" href="/favicon.ico?v=1" sizes="16x16 32x32 48x48 64x64">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png?v=1">
+  <link rel="icon" type="image/svg+xml" sizes="any" href="/favicon.svg?v=1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png?v=1">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin — MISRI CLOTH Orders</title>
