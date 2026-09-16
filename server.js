@@ -12,6 +12,7 @@ const {
   calcOrderTotal,
   hasTrackedStock
 } = require("./lib/order-utils");
+const { formatMeasurementsBlock } = require("./lib/measurement-fields");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -131,6 +132,7 @@ async function initDb() {
   await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tailoring_enabled BOOLEAN NOT NULL DEFAULT false;`);
   await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tailoring_type VARCHAR(50);`);
   await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tailoring_charge NUMERIC(12,2) DEFAULT 0;`);
+  await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tailoring_measurements JSONB;`);
 
   await dbPool.query(`
     CREATE TABLE IF NOT EXISTS contact_messages (
@@ -179,8 +181,8 @@ async function saveOrder(order) {
     await dbPool.query(
       `INSERT INTO order_items
        (order_id, product_id, product_name, size_label, color, meters, unit_price, quantity, line_total,
-        tailoring_enabled, tailoring_type, tailoring_charge)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        tailoring_enabled, tailoring_type, tailoring_charge, tailoring_measurements)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [
         orderId,
         item.product_id,
@@ -193,7 +195,8 @@ async function saveOrder(order) {
         item.line_total || 0,
         Boolean(item.tailoring_enabled || item.tailoringEnabled),
         item.tailoring_type || item.tailoringType || null,
-        Number(item.tailoring_charge ?? item.tailoringCharge ?? 0)
+        Number(item.tailoring_charge ?? item.tailoringCharge ?? 0),
+        item.tailoring_measurements || item.tailoringMeasurements || null
       ]
     );
   }
@@ -231,7 +234,7 @@ async function getOrders() {
 
   const itemsResult = await dbPool.query(
     `SELECT order_id, product_id, product_name, size_label, color, meters, unit_price, quantity, line_total,
-            tailoring_enabled, tailoring_type, tailoring_charge
+            tailoring_enabled, tailoring_type, tailoring_charge, tailoring_measurements
      FROM order_items`
   );
 
@@ -252,7 +255,8 @@ async function getOrders() {
       line_total: Number(row.line_total),
       tailoring_enabled: Boolean(row.tailoring_enabled),
       tailoring_type: row.tailoring_type || null,
-      tailoring_charge: Number(row.tailoring_charge || 0)
+      tailoring_charge: Number(row.tailoring_charge || 0),
+      tailoring_measurements: row.tailoring_measurements || null
     };
     if (!itemsByOrder.has(row.order_id)) itemsByOrder.set(row.order_id, []);
     itemsByOrder.get(row.order_id).push(normalizedItem);
@@ -445,6 +449,11 @@ app.post("/api/submit_order", async (req, res) => {
           emailBody += `${item.product_name} — ${item.meters}m @ Rs.${item.unit_price}/m${tailoringNote} = Rs.${item.line_total}\n`;
         } else {
           emailBody += `${item.product_name} — ${item.size}, ${item.color} x${item.quantity}${tailoringNote} = Rs.${item.line_total}\n`;
+        }
+        const measurements = item.tailoring_measurements || item.tailoringMeasurements;
+        if (tailoringEnabled && measurements) {
+          const block = formatMeasurementsBlock(tailoringType, measurements);
+          if (block) emailBody += `${block}\n`;
         }
       });
       emailBody += `\nTOTAL: Rs.${total}`;

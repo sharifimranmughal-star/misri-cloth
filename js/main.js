@@ -202,6 +202,12 @@ function initProductPage() {
   section.querySelector(".product-not-found-msg")?.remove();
 
   if (section.dataset.rendered === String(id)) return;
+
+  if (typeof loadMeasurementSchema === "function" && typeof measurementSchemaLoaded !== "undefined" && !measurementSchemaLoaded) {
+    loadMeasurementSchema().then(() => initProductPage());
+    return;
+  }
+
   section.dataset.rendered = String(id);
 
   document.title = `${product.name} — MISRI CLOTH`;
@@ -252,6 +258,13 @@ function initProductPage() {
 
   let wantsStitching = false;
   let selectedTailoringType = allowedStitchingTypes[0] || TAILORING_TYPES[0]?.id || "shalwar-kameez";
+
+  function renderMeasurementPanel(typeId) {
+    const panel = document.querySelector("#tailoring-measurements-wrap");
+    if (!panel || typeof renderTailoringMeasurementsForm !== "function") return;
+    panel.innerHTML = renderTailoringMeasurementsForm(typeId);
+    panel.hidden = !wantsStitching;
+  }
 
   function getTailoringExtra() {
     return wantsStitching ? getTailoringCharge(selectedTailoringType) : 0;
@@ -360,10 +373,12 @@ function initProductPage() {
           <div class="tailoring-types" id="tailoring-types" hidden>
             <p class="tailoring-types-label">Select garment type:</p>
             <div class="tailoring-type-options"></div>
+            <div id="tailoring-measurements-wrap" class="tailoring-measurements-wrap" hidden></div>
           </div>
         </div>
       `;
       colorGroup.insertAdjacentHTML("afterend", tailoringHTML);
+      renderMeasurementPanel(selectedTailoringType);
 
       const typeContainer = document.querySelector(".tailoring-type-options");
       if (typeContainer) {
@@ -384,6 +399,8 @@ function initProductPage() {
           btn.classList.add("active");
           const typesPanel = document.querySelector("#tailoring-types");
           if (typesPanel) typesPanel.hidden = !wantsStitching;
+          const measureWrap = document.querySelector("#tailoring-measurements-wrap");
+          if (measureWrap) measureWrap.hidden = !wantsStitching;
           updatePriceDisplay();
         });
       });
@@ -394,6 +411,7 @@ function initProductPage() {
         selectedTailoringType = btn.dataset.type;
         document.querySelectorAll(".tailoring-type-btn").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
+        renderMeasurementPanel(selectedTailoringType);
         updatePriceDisplay();
       });
     }
@@ -434,11 +452,25 @@ function initProductPage() {
           showToast("Please select a garment type for stitching");
           return;
         }
+        const measurements = collectTailoringMeasurements();
+        const validation = validateTailoringMeasurements(selectedTailoringType, measurements);
+        if (!validation.valid) {
+          showToast(validation.message);
+          return;
+        }
+        addToCart(product.id, selectedSize, selectedColor, 1, {
+          enabled: wantsStitching,
+          type: selectedTailoringType,
+          charge: getTailoringCharge(selectedTailoringType),
+          measurements
+        });
+        return;
       }
       addToCart(product.id, selectedSize, selectedColor, 1, {
-        enabled: wantsStitching,
-        type: selectedTailoringType,
-        charge: getTailoringCharge(selectedTailoringType)
+        enabled: false,
+        type: null,
+        charge: 0,
+        measurements: null
       });
     } else {
       addToCart(product.id, selectedSize, selectedColor, qty);

@@ -630,6 +630,50 @@ body.admin-app { padding: 0; min-height: 100vh; }
   font-weight: 600;
 }
 
+.item-tailoring,
+.item-measurements {
+  color: #8b6914;
+}
+
+.order-measurements-block {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(139, 105, 20, 0.08);
+  border-left: 3px solid #8b6914;
+  border-radius: 4px;
+}
+
+.order-measurements-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8b6914;
+  margin-bottom: 8px;
+}
+
+.order-measurements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px 12px;
+}
+
+.measurement-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78rem;
+}
+
+.measurement-row span {
+  color: var(--admin-muted, #666);
+}
+
+.measurement-row strong {
+  color: var(--admin-dark);
+  font-weight: 600;
+}
+
 .action-btns { display: flex; flex-wrap: wrap; gap: 4px; }
 .action-btns button {
   padding: 6px 12px;

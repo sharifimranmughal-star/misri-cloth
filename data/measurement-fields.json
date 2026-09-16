@@ -1,0 +1,60 @@
+{
+  "shalwar-kameez": {
+    "label": "Shalwar Qameez",
+    "fields": [
+      { "key": "chest", "label": "Chest", "hint": "Around fullest part", "unit": "in", "required": true },
+      { "key": "waist", "label": "Waist", "hint": "Natural waistline", "unit": "in", "required": true },
+      { "key": "hips", "label": "Hips", "hint": "Around fullest part", "unit": "in", "required": true },
+      { "key": "shoulder", "label": "Shoulder", "hint": "Seam to seam", "unit": "in", "required": true },
+      { "key": "sleeve_length", "label": "Sleeve Length", "hint": "Shoulder to wrist", "unit": "in", "required": true },
+      { "key": "kameez_length", "label": "Kameez Length", "hint": "Shoulder to desired length", "unit": "in", "required": true },
+      { "key": "armhole", "label": "Armhole", "hint": "Around armpit", "unit": "in", "required": true },
+      { "key": "shalwar_waist", "label": "Shalwar Waist", "hint": "Elastic area", "unit": "in", "required": true },
+      { "key": "shalwar_length", "label": "Shalwar Length", "hint": "Waist to ankle", "unit": "in", "required": true },
+      { "key": "thigh", "label": "Thigh", "hint": "Around fullest part", "unit": "in", "required": true },
+      { "key": "style_notes", "label": "Collar & Cuff Style", "hint": "e.g. round collar, band, sherwani", "type": "text", "required": false }
+    ]
+  },
+  "suits": {
+    "label": "Suit",
+    "fields": [
+      { "key": "chest", "label": "Chest", "hint": "Around fullest part", "unit": "in", "required": true },
+      { "key": "waist", "label": "Waist", "hint": "Natural waistline", "unit": "in", "required": true },
+      { "key": "hips", "label": "Hips", "hint": "Around fullest part", "unit": "in", "required": true },
+      { "key": "shoulder", "label": "Shoulder", "hint": "Seam to seam", "unit": "in", "required": true },
+      { "key": "sleeve_length", "label": "Sleeve Length", "hint": "Shoulder to wrist", "unit": "in", "required": true },
+      { "key": "jacket_length", "label": "Jacket Length", "hint": "Base of neck to desired length", "unit": "in", "required": true },
+      { "key": "trouser_waist", "label": "Trouser Waist", "hint": "Where belt sits", "unit": "in", "required": true },
+      { "key": "inseam", "label": "Inseam", "hint": "Crotch to ankle", "unit": "in", "required": true },
+      { "key": "outseam", "label": "Outseam", "hint": "Waist to ankle", "unit": "in", "required": true },
+      { "key": "neck", "label": "Neck", "hint": "Around base of neck", "unit": "in", "required": true },
+      { "key": "style_notes", "label": "Style Notes", "hint": "3-piece waistcoat or other preferences", "type": "text", "required": false }
+    ]
+  },
+  "prince-coat": {
+    "label": "Prince Coat",
+    "fields": [
+      { "key": "chest", "label": "Chest", "hint": "Around fullest part", "unit": "in", "required": true },
+      { "key": "waist", "label": "Waist", "hint": "Natural waistline", "unit": "in", "required": true },
+      { "key": "hips", "label": "Hips", "hint": "Around fullest part", "unit": "in", "required": true },
+      { "key": "shoulder", "label": "Shoulder", "hint": "Seam to seam", "unit": "in", "required": true },
+      { "key": "sleeve_length", "label": "Sleeve Length", "hint": "Shoulder to wrist", "unit": "in", "required": true },
+      { "key": "coat_length", "label": "Coat Length", "hint": "Base of neck to desired length", "unit": "in", "required": true },
+      { "key": "back_width", "label": "Back Width", "hint": "Across shoulder blades", "unit": "in", "required": true },
+      { "key": "armhole", "label": "Armhole", "hint": "Around armpit", "unit": "in", "required": true },
+      { "key": "style_notes", "label": "Length Preference", "hint": "Winter overcoat or blazer length", "type": "text", "required": false }
+    ]
+  },
+  "waistcoats": {
+    "label": "Waistcoat",
+    "fields": [
+      { "key": "chest", "label": "Chest", "hint": "Around fullest part", "unit": "in", "required": true },
+      { "key": "waist", "label": "Waist", "hint": "Natural waistline", "unit": "in", "required": true },
+      { "key": "shoulder", "label": "Shoulder", "hint": "Seam to seam", "unit": "in", "required": true },
+      { "key": "waistcoat_length", "label": "Waistcoat Length", "hint": "Shoulder to belt line", "unit": "in", "required": true },
+      { "key": "back_length", "label": "Back Length", "hint": "Neck base to waist", "unit": "in", "required": true },
+      { "key": "armhole", "label": "Armhole", "hint": "Around armpit", "unit": "in", "required": true },
+      { "key": "style_notes", "label": "Reference Notes", "hint": "Suit chest size if worn under a suit", "type": "text", "required": false }
+    ]
+  }
+}

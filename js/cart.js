@@ -19,8 +19,17 @@ function saveCart(cart) {
   document.dispatchEvent(new CustomEvent("cartUpdated"));
 }
 
-function buildCartKey(productId, size, color, tailoringType = null) {
-  return `${productId}-${size}-${color}-${tailoringType || "none"}`;
+function buildMeasurementsKey(measurements) {
+  if (!measurements || typeof measurements !== "object") return "none";
+  return Object.keys(measurements)
+    .sort()
+    .map((key) => `${key}:${measurements[key]}`)
+    .join("|") || "none";
+}
+
+function buildCartKey(productId, size, color, tailoringType = null, measurements = null) {
+  const measureKey = tailoringType ? buildMeasurementsKey(measurements) : "none";
+  return `${productId}-${size}-${color}-${tailoringType || "none"}-${measureKey}`;
 }
 
 function addToCart(productId, size, color, qty = 1, tailoring = {}) {
@@ -43,9 +52,10 @@ function addToCart(productId, size, color, qty = 1, tailoring = {}) {
   }
   const tailoringType = tailoringEnabled ? (tailoring.type || null) : null;
   const tailoringCharge = tailoringEnabled ? Number(tailoring.charge || getTailoringCharge(tailoringType)) : 0;
+  const tailoringMeasurements = tailoringEnabled && tailoring.measurements ? tailoring.measurements : null;
 
   const cart = getCart();
-  const key = buildCartKey(productId, selectedSize, selectedColor, tailoringType);
+  const key = buildCartKey(productId, selectedSize, selectedColor, tailoringType, tailoringMeasurements);
   const existing = cart.find(item => item.key === key);
 
   console.log('Adding to cart:', { productId, productName: product.name, productPrice: product.price, selectedSize, selectedColor });
@@ -72,6 +82,7 @@ function addToCart(productId, size, color, qty = 1, tailoring = {}) {
       existing.tailoringEnabled = tailoringEnabled;
       existing.tailoringType = tailoringType;
       existing.tailoringCharge = tailoringCharge;
+      existing.tailoringMeasurements = tailoringMeasurements;
     } else {
       cart.push({
         key,
@@ -86,7 +97,8 @@ function addToCart(productId, size, color, qty = 1, tailoring = {}) {
         qty: 1,
         tailoringEnabled,
         tailoringType,
-        tailoringCharge
+        tailoringCharge,
+        tailoringMeasurements
       });
     }
     const totalLabel = formatPrice(getLineTotal(cart.find(i => i.key === key)));
@@ -122,7 +134,8 @@ function addToCart(productId, size, color, qty = 1, tailoring = {}) {
       qty,
       tailoringEnabled,
       tailoringType,
-      tailoringCharge
+      tailoringCharge,
+      tailoringMeasurements
     };
     console.log('Cart item being added:', cartItem);
     cart.push(cartItem);
@@ -281,8 +294,11 @@ function renderCartDrawer() {
   itemsEl.innerHTML = cart.map(item => {
     const lineTotal = getLineTotal(item);
     console.log('Cart item:', { name: item.name, unitPrice: item.unitPrice, lineTotal });
+    const measureSummary = item.tailoringEnabled && item.tailoringMeasurements && typeof formatMeasurementsSummary === "function"
+      ? formatMeasurementsSummary(item.tailoringType, item.tailoringMeasurements)
+      : "";
     const tailoringLine = item.tailoringEnabled && item.tailoringType
-      ? `<br><small class="cart-tailoring-note"><i class="fas fa-cut"></i> Custom ${getTailoringLabel(item.tailoringType)} stitching (+${formatPrice(item.tailoringCharge || 0)})</small>`
+      ? `<br><small class="cart-tailoring-note"><i class="fas fa-cut"></i> Custom ${getTailoringLabel(item.tailoringType)} stitching (+${formatPrice(item.tailoringCharge || 0)})</small>${measureSummary ? `<br><small class="cart-measurements-note"><i class="fas fa-ruler"></i> ${measureSummary}</small>` : ""}`
       : "";
     const detailLine = item.isFabric
       ? `${item.meters} meter${item.meters > 1 ? "s" : ""} · ${item.color} · ${formatPrice(item.unitPrice)}/m${tailoringLine}`
@@ -510,7 +526,8 @@ async function submitOrder(e) {
       line_total: getLineTotal(item),
       tailoring_enabled: Boolean(item.tailoringEnabled),
       tailoring_type: item.tailoringType || null,
-      tailoring_charge: Number(item.tailoringCharge || 0)
+      tailoring_charge: Number(item.tailoringCharge || 0),
+      tailoring_measurements: item.tailoringMeasurements || null
     }))
   };
 

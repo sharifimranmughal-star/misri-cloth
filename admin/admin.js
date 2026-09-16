@@ -15,6 +15,50 @@ const TAILORING_LABELS = {
   "prince-coat": "Prince Coat",
   waistcoats: "Waistcoat"
 };
+let MEASUREMENT_SCHEMA = null;
+
+async function loadMeasurementSchemaAdmin() {
+  if (MEASUREMENT_SCHEMA) return MEASUREMENT_SCHEMA;
+  try {
+    const res = await fetch("/data/measurement-fields.json");
+    MEASUREMENT_SCHEMA = res.ok ? await res.json() : {};
+  } catch {
+    MEASUREMENT_SCHEMA = {};
+  }
+  return MEASUREMENT_SCHEMA;
+}
+
+function renderMeasurementsHTML(typeId, measurements) {
+  if (!measurements || typeof measurements !== "object") return "";
+  const fields = MEASUREMENT_SCHEMA?.[typeId]?.fields || [];
+  const rows = fields.map((field) => {
+    const value = measurements[field.key];
+    if (value === undefined || value === null || value === "") return "";
+    const display = field.type === "text" ? value : `${value}${field.unit ? ` ${field.unit}` : ""}`;
+    return `<div class="measurement-row"><span>${esc(field.label)}</span><strong>${esc(String(display))}</strong></div>`;
+  }).filter(Boolean).join("");
+  if (!rows) return "";
+  return `
+    <div class="order-measurements-block">
+      <div class="order-measurements-title">📏 ${esc(TAILORING_LABELS[typeId] || typeId)} Measurements</div>
+      <div class="order-measurements-grid">${rows}</div>
+    </div>`;
+}
+
+function renderMeasurementsSummary(typeId, measurements) {
+  if (!measurements || typeof measurements !== "object") return "";
+  const fields = MEASUREMENT_SCHEMA?.[typeId]?.fields || [];
+  const parts = fields
+    .filter((field) => measurements[field.key] !== undefined && measurements[field.key] !== "")
+    .slice(0, 3)
+    .map((field) => {
+      const value = measurements[field.key];
+      const display = field.type === "text" ? value : `${value}${field.unit || ""}`;
+      return `${field.label}: ${display}`;
+    });
+  if (!parts.length) return "";
+  return `<br><small class="item-measurements">📏 ${esc(parts.join(" · "))}${Object.keys(measurements).length > 3 ? " …" : ""}</small>`;
+}
 
 function toggleAdminTheme() {
   const currentTheme = document.documentElement.getAttribute("data-theme");
@@ -771,6 +815,7 @@ function setOrderFilter(filter) {
 async function loadOrders() {
   showLoading(true);
   try {
+    await loadMeasurementSchemaAdmin();
     const params = { filter: orderFilter, search: orderSearch, status: orderStatusFilter };
     if (orderFilter === "custom") {
       params.from = $("#order-from")?.value;
@@ -815,7 +860,13 @@ function renderOrdersTable(orders) {
       const sizeInfo = i.size ? `<span class="item-size">Size: ${esc(i.size)}</span>` : '';
       const itemDetails = [colorInfo, sizeInfo].filter(Boolean).join(' · ');
       const quantityInfo = i.meters ? `${i.meters}m × ${i.quantity || 1}` : `×${i.quantity}`;
-      return `${esc(i.product_name)} ${itemDetails ? `(${itemDetails})` : ''} ${quantityInfo}`;
+      const tailoringInfo = i.tailoring_enabled && i.tailoring_type
+        ? `<br><small class="item-tailoring">✂️ ${esc(TAILORING_LABELS[i.tailoring_type] || i.tailoring_type)}</small>`
+        : "";
+      const measureInfo = i.tailoring_enabled && i.tailoring_measurements
+        ? renderMeasurementsSummary(i.tailoring_type, i.tailoring_measurements)
+        : "";
+      return `${esc(i.product_name)} ${itemDetails ? `(${itemDetails})` : ''} ${quantityInfo}${tailoringInfo}${measureInfo}`;
     }).join("<br>");
     const statusOpts = ORDER_STATUSES.map((s) =>
       `<option value="${s}" ${o.status === s ? "selected" : ""}>${s}</option>`
@@ -897,6 +948,7 @@ async function deleteOrder(orderId, orderRef) {
 async function viewOrderDetails(orderId) {
   showLoading(true);
   try {
+    await loadMeasurementSchemaAdmin();
     const data = await apiFetch("/api/admin/orders");
     const order = (data.orders || []).find(o => o.id === orderId);
     if (!order) {
@@ -913,6 +965,9 @@ async function viewOrderDetails(orderId) {
       const tailoringBadge = item.tailoring_enabled && item.tailoring_type
         ? `<span class="tailoring-badge">✂️ ${esc(TAILORING_LABELS[item.tailoring_type] || item.tailoring_type)} (+${fmtMoney(item.tailoring_charge || 0)})</span>`
         : '';
+      const measurementsHTML = item.tailoring_enabled && item.tailoring_measurements
+        ? renderMeasurementsHTML(item.tailoring_type, item.tailoring_measurements)
+        : '';
       
       return `
         <div class="order-item-row">
@@ -925,6 +980,7 @@ async function viewOrderDetails(orderId) {
               <span class="quantity-badge">${quantityInfo}</span>
               ${tailoringBadge}
             </div>
+            ${measurementsHTML}
             <div class="order-item-price">${fmtMoney(item.unit_price)} each</div>
           </div>
           <div class="order-item-total">${fmtMoney(item.line_total)}</div>

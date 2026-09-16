@@ -1774,18 +1774,6 @@ h1, h2, h3, h4 {
   box-shadow: 0 4px 12px rgba(201, 169, 98, 0.4);
 }
 
-.social-links .location-btn {
-  color: var(--color-gold);
-}
-
-[data-theme="dark"] .social-links .location-btn {
-  color: var(--color-gold);
-}
-
-.social-links .location-btn:hover {
-  color: var(--color-dark);
-}
-
 .footer-col h4 {
   font-family: var(--font-body);
   font-size: 0.8rem;
@@ -3960,96 +3948,62 @@ h1, h2, h3, h4 {
 :root .product-actions .btn-primary{flex:1;min-height:53px;min-width:155px}
 :root .product-actions .btn-primary:disabled{background:var(--color-bg-alt);color:var(--color-text-muted);border-color:var(--color-border);transform:none;box-shadow:none}
 
-/* Tailoring/Stitching Section */
+/* Custom tailoring on product page */
 .tailoring-section {
-  margin-bottom: 25px;
+  margin-top: 8px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
 }
 
 .tailoring-intro {
-  font-size: 12px;
+  font-size: 0.85rem;
   color: var(--color-text-muted);
-  line-height: 1.6;
-  margin-bottom: 16px;
+  margin: -4px 0 14px;
 }
 
 .tailoring-choice {
   display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
-.tailoring-toggle-btn {
-  flex: 1;
-  padding: 12px 20px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.tailoring-toggle-btn,
+.tailoring-type-btn {
   border: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-dark);
-  border-radius: var(--radius);
-  transition: all var(--transition);
+  padding: 10px 14px;
+  font-family: inherit;
+  font-size: 0.82rem;
   cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
 
-.tailoring-toggle-btn:hover {
-  border-color: var(--color-dark);
-  background: var(--color-bg-alt);
-}
-
-.tailoring-toggle-btn.active {
+.tailoring-toggle-btn.active,
+.tailoring-type-btn.active,
+.tailoring-toggle-btn:hover,
+.tailoring-type-btn:hover {
   background: var(--color-dark);
-  color: var(--color-white);
+  color: var(--atelier-contrast);
   border-color: var(--color-dark);
 }
 
-[data-theme="dark"] .tailoring-toggle-btn {
-  color: var(--color-text);
-  border-color: var(--color-border);
-}
-
-[data-theme="dark"] .tailoring-toggle-btn:hover {
-  border-color: var(--color-gold);
-  background: rgba(201, 169, 98, 0.1);
-}
-
-[data-theme="dark"] .tailoring-toggle-btn.active {
-  background: var(--color-gold);
-  color: var(--color-dark);
-  border-color: var(--color-gold);
-}
-
-.tailoring-types {
-  margin-top: 20px;
-  padding: 20px;
-  background: var(--color-bg-alt);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-}
-
-[data-theme="dark"] .tailoring-types {
-  background: var(--color-bg);
-  border-color: var(--color-border);
-}
-
-.tailoring-types-label {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
+.tailoring-types-label,
+.tailoring-measurements-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-dark);
-  margin-bottom: 12px;
-}
-
-[data-theme="dark"] .tailoring-types-label {
-  color: var(--color-text);
+  margin-bottom: 10px;
 }
 
 .tailoring-type-options {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
+  gap: 8px;
+  margin-bottom: 18px;
 }
 
 .tailoring-type-btn {
@@ -4057,89 +4011,120 @@ h1, h2, h3, h4 {
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
-  padding: 14px 16px;
-  font-size: 11px;
-  font-weight: 500;
-  border: 1px solid var(--color-border);
-  background: transparent;
-  color: var(--color-dark);
-  border-radius: var(--radius);
-  transition: all var(--transition);
-  cursor: pointer;
   text-align: left;
 }
 
-.tailoring-type-btn:hover {
-  border-color: var(--color-gold);
-  background: rgba(201, 169, 98, 0.05);
-}
-
-.tailoring-type-btn.active {
-  background: var(--color-dark);
-  color: var(--color-white);
-  border-color: var(--color-dark);
-}
-
-[data-theme="dark"] .tailoring-type-btn {
-  color: var(--color-text);
-  border-color: var(--color-border);
-}
-
-[data-theme="dark"] .tailoring-type-btn:hover {
-  border-color: var(--color-gold);
-  background: rgba(201, 169, 98, 0.1);
-}
-
-[data-theme="dark"] .tailoring-type-btn.active {
-  background: var(--color-gold);
-  color: var(--color-dark);
-  border-color: var(--color-gold);
-}
-
-.tailoring-type-name {
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 600;
-}
-
 .tailoring-type-price {
-  font-size: 11px;
-  color: var(--color-burgundy);
-  font-weight: 500;
-}
-
-[data-theme="dark"] .tailoring-type-price {
+  font-size: 0.75rem;
   color: var(--color-gold);
 }
 
-/* Price visibility in active state */
-.tailoring-type-btn.active .tailoring-type-price {
-  color: var(--color-gold-light);
+.tailoring-measurements-wrap {
+  margin-top: 6px;
 }
 
-[data-theme="dark"] .tailoring-type-btn.active .tailoring-type-price {
+.tailoring-measurements {
+  background: var(--color-bg-alt);
+  border: 1px solid var(--color-border);
+  padding: 18px;
+}
+
+.measure-input-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.measure-input-full {
+  grid-column: 1 / -1;
+}
+
+.measure-input-group label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
   color: var(--color-dark);
 }
 
-.fabric-tailoring-label {
-  display: block;
-  font-size: 11px;
+.required-mark {
+  color: #c0392b;
+}
+
+.measure-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.measure-input-group input {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-dark);
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.measure-input-group input:focus {
+  outline: none;
+  border-color: var(--color-gold);
+}
+
+.measure-unit {
+  font-size: 0.78rem;
   color: var(--color-text-muted);
-  margin-top: 4px;
+  white-space: nowrap;
 }
 
-.fabric-grand-total {
+.measure-hint {
   display: block;
-  font-size: 14px;
-  color: var(--color-dark);
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--color-border);
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
 }
 
-[data-theme="dark"] .fabric-grand-total {
-  color: var(--color-text);
-  border-top-color: var(--color-border);
+.measurement-form-note {
+  margin-top: 14px;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.measurement-form-note i {
+  color: var(--color-gold);
+  margin-right: 6px;
+}
+
+.cart-tailoring-note,
+.cart-measurements-note {
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.cart-measurements-note {
+  display: inline-block;
+  margin-top: 2px;
+}
+
+.fabric-tailoring-label,
+.fabric-grand-total {
+  flex-basis: 100%;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.fabric-grand-total strong,
+.fabric-tailoring-label strong {
+  color: var(--color-gold);
+}
+
+@media (max-width: 640px) {
+  .measure-input-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Supporting content, tailoring measurements and existing forms. */
