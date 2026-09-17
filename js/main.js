@@ -307,10 +307,12 @@ function initProductPage() {
   const isFabric = isFabricProduct(product);
   const allowedStitchingTypes = getProductStitchingTypes(product);
   const offersStitching = allowedStitchingTypes.length > 0;
-  let selectedMeters = isFabric ? parseMetersFromSize(product.sizes[0]) : 1;
+  let qty = 1;
 
   const garmentOptions = isFabric ? null : MisriCatalog.garmentOptions(product);
-  const availableSizes = isFabric ? product.sizes : [...garmentOptions.readyMadeSizes, ...(garmentOptions.customEnabled ? ["Custom Stitching"] : [])];
+  const availableSizes = isFabric
+    ? (Array.isArray(product.sizes) ? product.sizes.filter(Boolean) : [])
+    : [...garmentOptions.readyMadeSizes, ...(garmentOptions.customEnabled ? ["Custom Stitching"] : [])];
   let wantsStitching = !isFabric && MisriCatalog.isCustomSize(availableSizes[0]);
   let selectedTailoringType = (!isFabric ? garmentOptions.measurementType : null) || allowedStitchingTypes[0] || TAILORING_TYPES[0]?.id || "shalwar-kameez";
 
@@ -341,14 +343,14 @@ function initProductPage() {
   function updatePriceDisplay() {
     if (!price) return;
     if (isFabric) {
-      const perMeter = getPerMeterPrice(product);
-      const fabricTotal = getFabricLineTotal(product, selectedMeters);
-      const stitchingExtra = getTailoringExtra();
-      const extras = getStitchingAddonsTotal(selectedAddons());
+      const count = Math.max(1, qty);
+      const fabricTotal = getFabricLineTotal(product) * count;
+      const stitchingExtra = getTailoringExtra() * count;
+      const extras = getStitchingAddonsTotal(selectedAddons()) * count;
       const grandTotal = fabricTotal + stitchingExtra + extras;
       price.innerHTML = `
-        <span class="price-current">${formatPrice(perMeter)}/meter</span>
-        <span class="fabric-total-label">Fabric (${selectedMeters}m): <strong>${formatPrice(fabricTotal)}</strong></span>
+        <span class="price-current">${formatPrice(getFabricLineTotal(product))}</span>
+        <span class="fabric-total-label">Fabric ×${count}: <strong>${formatPrice(fabricTotal)}</strong></span>
         ${extras ? `<span class="fabric-tailoring-label">Optional extras: <strong>+${formatPrice(extras)}</strong></span>` : ""}
         ${stitchingExtra ? `<span class="fabric-tailoring-label">Stitching: <strong>+${formatPrice(stitchingExtra)}</strong></span>` : ""}
         <span class="fabric-grand-total">Total: <strong>${formatPrice(grandTotal)}</strong></span>
@@ -366,9 +368,8 @@ function initProductPage() {
 
   if (desc) desc.textContent = product.description;
 
-  let selectedSize = availableSizes[0];
+  let selectedSize = availableSizes[0] || (isFabric ? "4 Meter" : undefined);
   let selectedColor = product.colors[0];
-  let qty = 1;
 
   function getMaxQtyForSelectedColor() {
     return getColorStock(product, selectedColor);
@@ -376,11 +377,12 @@ function initProductPage() {
 
   function updateQtyDisplay() {
     if (qtyEl) qtyEl.textContent = qty;
+    updatePriceDisplay();
   }
 
   function updateStockAndQtyLimits() {
     const maxQty = getMaxQtyForSelectedColor();
-    if (!isFabric && qty > maxQty) {
+    if (qty > maxQty) {
       qty = Math.max(1, maxQty);
       updateQtyDisplay();
     }
@@ -399,7 +401,9 @@ function initProductPage() {
   }
 
   const sizeLabel = document.querySelector(".option-group label");
-  if (sizeLabel) sizeLabel.textContent = isFabric ? "Meters (min. 4)" : "Ready-made size or custom stitching";
+  if (sizeLabel) sizeLabel.textContent = isFabric ? "Length" : "Ready-made size or custom stitching";
+  const sizeGroup = sizes?.closest(".option-group");
+  if (isFabric && sizeGroup && !availableSizes.length) sizeGroup.hidden = true;
   if (!isFabric && garmentOptions.customEnabled) {
     const sizeGroup = sizes?.closest('.option-group');
     sizeGroup?.insertAdjacentHTML('afterend', '<div class="option-group garment-measurements" id="tailoring-measurements-wrap" hidden></div>');
@@ -421,10 +425,6 @@ function initProductPage() {
         if (panel) panel.hidden = !wantsStitching;
         updatePriceDisplay();
       }
-      if (isFabric) {
-        selectedMeters = parseMetersFromSize(selectedSize);
-        updatePriceDisplay();
-      }
     });
   }
 
@@ -436,11 +436,6 @@ function initProductPage() {
       if (!e.target.classList.contains("color-btn")) return;
       selectColor(e.target.dataset.color);
     });
-  }
-
-  const qtyRow = document.querySelector(".qty-selector")?.closest(".product-actions");
-  if (qtyRow && isFabric) {
-    qtyRow.querySelector(".qty-selector")?.style.setProperty("display", "none");
   }
 
   if (isFabric && offersStitching) {
@@ -503,20 +498,18 @@ function initProductPage() {
 
   const qtyEl = document.querySelector("#qty-value");
   document.querySelector("#qty-decrease")?.addEventListener("click", () => {
-    if (!isFabric && qty > 1) {
+    if (qty > 1) {
       qty--;
       updateQtyDisplay();
     }
   });
   document.querySelector("#qty-increase")?.addEventListener("click", () => {
-    if (!isFabric) {
-      const maxQty = getMaxQtyForSelectedColor();
-      if (qty < maxQty) {
-        qty++;
-        updateQtyDisplay();
-      } else {
-        showToast(`Only ${maxQty} available for ${selectedColor}`);
-      }
+    const maxQty = getMaxQtyForSelectedColor();
+    if (qty < maxQty) {
+      qty++;
+      updateQtyDisplay();
+    } else {
+      showToast(`Only ${maxQty} available for ${selectedColor}`);
     }
   });
 
@@ -542,7 +535,7 @@ function initProductPage() {
           showToast(validation.message);
           return;
         }
-        addToCart(product.id, selectedSize, selectedColor, 1, {
+        addToCart(product.id, selectedSize, selectedColor, qty, {
           enabled: wantsStitching,
           type: selectedTailoringType,
           charge: getTailoringCharge(selectedTailoringType),
@@ -551,7 +544,7 @@ function initProductPage() {
         });
         return;
       }
-      addToCart(product.id, selectedSize, selectedColor, 1, {
+      addToCart(product.id, selectedSize, selectedColor, qty, {
         enabled: false,
         type: null,
         charge: 0,

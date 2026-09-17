@@ -76,23 +76,20 @@ function addToCart(productId, size, color, qty = 1, tailoring = {}) {
 
   if (isFabricProduct(product)) {
     const meters = parseMetersFromSize(selectedSize);
-    if (meters < 4) {
-      showToast("Minimum fabric order is 4 meters");
-      return;
-    }
-    const needed = Math.ceil(meters);
     const available = getColorStock(product, selectedColor);
-    if (available < needed) {
+    const addQty = Math.max(1, Number(qty) || 1);
+    const newQty = existing ? existing.qty + addQty : addQty;
+    if (newQty > available) {
       showToast(`Only ${available} available for ${selectedColor}`);
       return;
     }
-    const unitPrice = getPerMeterPrice(product);
-    console.log('Fabric unit price:', unitPrice);
+    const unitPrice = Number(product.price) || 0;
 
     if (existing) {
+      existing.qty = newQty;
       existing.meters = meters;
       existing.size = selectedSize;
-      existing.unitPrice = Number(unitPrice) || 0;
+      existing.unitPrice = unitPrice;
       existing.tailoringEnabled = tailoringEnabled;
       existing.tailoringType = tailoringType;
       existing.tailoringCharge = tailoringCharge;
@@ -108,8 +105,8 @@ function addToCart(productId, size, color, qty = 1, tailoring = {}) {
         color: selectedColor,
         isFabric: true,
         meters,
-        unitPrice: Number(unitPrice) || 0,
-        qty: 1,
+        unitPrice,
+        qty: addQty,
         tailoringEnabled,
         tailoringType,
         tailoringCharge,
@@ -117,10 +114,10 @@ function addToCart(productId, size, color, qty = 1, tailoring = {}) {
         stitchingAddons
       });
     }
-    const totalLabel = formatPrice(getLineTotal(cart.find(i => i.key === key)));
+    const added = cart.find(i => i.key === key);
     const stitchLabel = tailoringEnabled ? ` + ${getTailoringLabel(tailoringType)} stitching` : "";
     saveCart(cart);
-    showToast(`${product.name} — ${meters}m${stitchLabel} added (${totalLabel})`);
+    showToast(`${product.name}${stitchLabel} added ×${added.qty} (${formatPrice(getLineTotal(added))})`);
     return;
   }
 
@@ -166,31 +163,10 @@ function removeFromCart(key) {
   saveCart(getCart().filter(item => item.key !== key));
 }
 
-function updateFabricMeters(key, meters) {
-  if (meters < 4) {
-    showToast("Minimum fabric order is 4 meters");
-    return;
-  }
-  const cart = getCart();
-  const item = cart.find(i => i.key === key);
-  if (!item || !item.isFabric) return;
-  const product = getProductById(item.id);
-  if (product) {
-    const available = getColorStock(product, item.color);
-    if (Math.ceil(meters) > available) {
-      showToast(`Only ${available} available for ${item.color}`);
-      return;
-    }
-  }
-  item.meters = meters;
-  item.size = `${meters} Meter`;
-  saveCart(cart);
-}
-
 function updateCartQty(key, qty) {
   const cart = getCart();
   const item = cart.find(i => i.key === key);
-  if (!item || item.isFabric) return;
+  if (!item) return;
   if (qty <= 0) {
     removeFromCart(key);
     return;
@@ -224,7 +200,7 @@ function getCartTotal() {
 }
 
 function getCartCount() {
-  return getCart().length;
+  return getCart().reduce((sum, item) => sum + Math.max(1, Number(item.qty) || 1), 0);
 }
 
 function updateCartCount() {
@@ -319,19 +295,13 @@ function renderCartDrawer() {
       : "";
     const extrasLine = item.stitchingAddons?.length ? `<br><small class="cart-extras-note">Extras: ${item.stitchingAddons.map(a => `${escapeCatalogText(a.name)} (+${formatPrice(a.price)})`).join(', ')} per garment</small>` : '';
     const detailLine = item.isFabric
-      ? `${item.meters} meter${item.meters > 1 ? "s" : ""} · ${item.color} · ${formatPrice(item.unitPrice)}/m${tailoringLine}${extrasLine}`
+      ? `${item.color} · ${formatPrice(item.unitPrice)} each${tailoringLine}${extrasLine}`
       : `${item.size} · ${item.color}${tailoringLine}${extrasLine}`;
 
-    const qtyControls = item.isFabric
-      ? `<div class="qty-control">
-          <button class="qty-btn" data-action="decrease" data-key="${item.key}" aria-label="Decrease meters">−</button>
-          <span>${item.meters}m</span>
-          <button class="qty-btn" data-action="increase" data-key="${item.key}" aria-label="Increase meters">+</button>
-        </div>`
-      : `<div class="qty-control">
-          <button class="qty-btn" data-action="decrease" data-key="${item.key}">−</button>
+    const qtyControls = `<div class="qty-control">
+          <button class="qty-btn" data-action="decrease" data-key="${item.key}" aria-label="Decrease quantity">−</button>
           <span>${item.qty}</span>
-          <button class="qty-btn" data-action="increase" data-key="${item.key}">+</button>
+          <button class="qty-btn" data-action="increase" data-key="${item.key}" aria-label="Increase quantity">+</button>
         </div>`;
 
     return `
@@ -540,7 +510,7 @@ async function submitOrder(e) {
       color: item.color,
       meters: item.isFabric ? item.meters : null,
       unit_price: item.unitPrice,
-      quantity: item.isFabric ? 1 : item.qty,
+      quantity: item.qty,
       line_total: getLineTotal(item),
       tailoring_enabled: Boolean(item.tailoringEnabled),
       tailoring_type: item.tailoringType || null,
@@ -610,13 +580,8 @@ function initCartDrawer() {
       const key = qtyBtn.dataset.key;
       const item = getCart().find(i => i.key === key);
       if (!item) return;
-      if (item.isFabric) {
-        const delta = qtyBtn.dataset.action === "increase" ? 1 : -1;
-        updateFabricMeters(key, item.meters + delta);
-      } else {
-        const delta = qtyBtn.dataset.action === "increase" ? 1 : -1;
-        updateCartQty(key, item.qty + delta);
-      }
+      const delta = qtyBtn.dataset.action === "increase" ? 1 : -1;
+      updateCartQty(key, item.qty + delta);
       renderCartDrawer();
     }
     if (e.target.closest(".btn-add-cart")) {
@@ -627,7 +592,7 @@ function initCartDrawer() {
       const id = Number(btn.dataset.id);
       const product = getProductById(id);
       if (product && isFabricProduct(product)) {
-        await addToCart(id, "4 Meter", product.colors[0], 1);
+        await addToCart(id, product.sizes?.[0] || "4 Meter", product.colors[0], 1);
       } else if (product) {
         window.location.href = `product.html?id=${id}`;
       }

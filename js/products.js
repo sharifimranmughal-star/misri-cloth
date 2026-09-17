@@ -363,16 +363,12 @@ function getProductById(id) {
 }
 
 function parseMetersFromSize(size) {
-  const match = String(size).match(/(\d+)\s*Meter/);
+  const match = String(size || "").match(/(\d+)\s*Meter/);
   return match ? Number(match[1]) : 4;
 }
 
-function getPerMeterPrice(product) {
-  return product.price / product.referenceMeters;
-}
-
-function getFabricLineTotal(product, meters) {
-  return getPerMeterPrice(product) * meters;
+function getFabricLineTotal(product) {
+  return Number(product.price) || 0;
 }
 
 function getTailoringLabel(typeId) {
@@ -412,9 +408,12 @@ function productOffersStitching(product) {
 }
 
 function getLineTotal(item) {
-  const fabricTotal = item.isFabric ? item.unitPrice * item.meters : item.unitPrice * item.qty;
-  const tailoringTotal = item.tailoringEnabled ? Number(item.tailoringCharge || 0) : 0;
-  const addonsTotal = item.tailoringEnabled ? getStitchingAddonsTotal(item.stitchingAddons) * (item.isFabric ? 1 : item.qty) : 0;
+  const qty = Math.max(1, Number(item.qty) || 1);
+  const product = item.isFabric ? getProductById(item.id) : null;
+  const unitPrice = product ? (Number(product.price) || 0) : item.unitPrice;
+  const fabricTotal = unitPrice * qty;
+  const tailoringTotal = item.tailoringEnabled ? Number(item.tailoringCharge || 0) * qty : 0;
+  const addonsTotal = item.tailoringEnabled ? getStitchingAddonsTotal(item.stitchingAddons) * qty : 0;
   return fabricTotal + tailoringTotal + addonsTotal;
 }
 

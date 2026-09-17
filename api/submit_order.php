@@ -69,7 +69,8 @@ try {
 
         $line = $item['product_name'];
         if ($meters) {
-            $line .= " — {$meters}m @ Rs. " . number_format($item['unit_price']) . "/m";
+            $qty = isset($item['quantity']) ? intval($item['quantity']) : 1;
+            $line .= " — {$meters}m × {$qty} @ Rs. " . number_format($item['unit_price']);
         } else {
             $line .= " — {$item['size']}, {$item['color']} x{$item['quantity']}";
         }

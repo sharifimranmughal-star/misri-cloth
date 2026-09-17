@@ -11,7 +11,8 @@ const {
   validateEmailServer,
   calcDeliveryCharge,
   calcOrderTotal,
-  hasTrackedStock
+  hasTrackedStock,
+  getItemStockQty
 } = require("./lib/order-utils");
 const { validateGarmentOrderItem } = require("./lib/garment-orders");
 const { formatMeasurementsBlock } = require("./lib/measurement-fields");
@@ -385,7 +386,7 @@ app.post("/api/submit_order", async (req, res) => {
       }
       const addonValidation = validateAddonOrderItem(product, item, availableAddons, currentCharges);
       if (!addonValidation.valid) return res.status(400).json({ success: false, message: addonValidation.message });
-      const needed = item.meters ? Math.ceil(item.meters) : (item.quantity || 1);
+      const needed = getItemStockQty(item);
       const availableStock = getColorStock(product, item.color);
 
       if (availableStock < needed) {
@@ -426,7 +427,7 @@ app.post("/api/submit_order", async (req, res) => {
     // Non-critical operations - don't fail order if these fail
     try {
       for (const item of items) {
-        const qty = item.meters ? Math.ceil(item.meters) : (item.quantity || 1);
+        const qty = getItemStockQty(item);
         await adminApi.adjustStock(item.product_id, -qty, "System", "Order placed — stock reduced", item.color);
       }
     } catch (stockErr) {
@@ -464,7 +465,7 @@ app.post("/api/submit_order", async (req, res) => {
           ? ` + Custom ${tailoringType} stitching (Rs.${tailoringCharge})`
           : "";
         if (item.meters) {
-          emailBody += `${item.product_name} — ${item.meters}m @ Rs.${item.unit_price}/m${tailoringNote} = Rs.${item.line_total}\n`;
+          emailBody += `${item.product_name} — ${item.meters}m × ${item.quantity || 1} @ Rs.${item.unit_price}${tailoringNote} = Rs.${item.line_total}\n`;
         } else {
           emailBody += `${item.product_name} — ${item.size}, ${item.color} x${item.quantity}${tailoringNote} = Rs.${item.line_total}\n`;
         }

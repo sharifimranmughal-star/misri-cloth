@@ -611,7 +611,8 @@ function openProductModal(product = null) {
   $("#pf-reviews").value = product?.reviews ?? 0;
   $("#pf-sizes").value = (product?.sizes || ["Custom Measurement"]).join(", ");
   renderColorStockRows(product);
-  $("#pf-ref-meters").value = product?.referenceMeters || "";
+  const refMeters = $("#pf-ref-meters");
+  if (refMeters) refMeters.value = product?.referenceMeters || "";
   $("#pf-featured").checked = Boolean(product?.featured);
   $("#pf-new").checked = Boolean(product?.new);
   $("#pf-visible").checked = product ? product.isVisible !== false : true;
@@ -760,7 +761,7 @@ async function saveProductForm(e) {
     reviews: Number($("#pf-reviews").value),
     sizes: $("#pf-sizes").value.split(",").map((s) => s.trim()).filter(Boolean),
     colors,
-    referenceMeters: $("#pf-ref-meters").value ? Number($("#pf-ref-meters").value) : null,
+    referenceMeters: $("#pf-ref-meters")?.value ? Number($("#pf-ref-meters").value) : null,
     featured: $("#pf-featured").checked,
     new: $("#pf-new").checked,
     isVisible: $("#pf-visible").checked,
@@ -1541,7 +1542,7 @@ async function saveStitchingAddons() {
 function renderOrderAddons(item) {
   const addons = item.stitching_addons || [];
   if (!addons.length) return '';
-  const count = item.meters ? 1 : Number(item.quantity || 1);
+  const count = Math.max(1, Number(item.quantity || 1));
   const total = addons.reduce((sum, a) => sum + Number(a.price || 0), 0) * count;
   return `<div class="order-extras"><strong>Stitching extras</strong><br>${addons.map(a => `${esc(a.name)} — +${fmtMoney(a.price)} per garment`).join('<br>')}<br><strong>Extras total${count > 1 ? ` (${count} garments)` : ''}: ${fmtMoney(total)}</strong></div>`;
 }
