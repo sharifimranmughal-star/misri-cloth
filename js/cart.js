@@ -537,6 +537,14 @@ async function submitOrder(e) {
       form.reset();
       renderCartDrawer();
       showToast(`Order placed! Ref: ${data.order_ref}. We will contact you soon.`);
+      const receipt = document.createElement('dialog');
+      receipt.style.cssText = 'margin:auto;padding:32px;max-width:90vw;border:1px solid #c9a962;border-radius:12px;background:var(--color-bg);color:var(--color-text)';
+      const heading = document.createElement('h2'); heading.textContent = 'Thank you for your order';
+      const reference = document.createElement('p'); reference.textContent = `Save your order reference: ${data.order_ref}`;
+      const tracking = document.createElement('a'); tracking.href = 'track-order.html'; tracking.textContent = 'Track your order'; tracking.className = 'btn btn-primary';
+      const close = document.createElement('button'); close.type = 'button'; close.textContent = 'Close'; close.className = 'btn'; close.addEventListener('click', () => receipt.close());
+      receipt.append(heading, reference, tracking, close);document.body.append(receipt);
+      receipt.addEventListener('close', () => receipt.remove()); receipt.showModal();
     } else {
       showToast(data.message || "Could not place order. Please call us.");
     }

@@ -59,8 +59,18 @@ async function checkDbAvailable() {
 }
 
 app.use(express.json({ limit: "5mb" }));
-app.use(express.static(ROOT));
-app.use("/uploads", express.static(UPLOADS_DIR));
+// Only public storefront assets may be served; data and server source stay private.
+app.use((req, res, next) => {
+  let pathname;
+  try { pathname = decodeURIComponent(req.path); } catch { return res.sendStatus(400); }
+  const publicRoot = /^\/(?:[a-z0-9-]+\.html|favicon\.(?:ico|svg)|manifest\.json)?$/i;
+  const publicAsset = /^\/(?:css|js|pics|icons|uploads|admin)\/[a-z0-9_./ -]+\.(?:css|js|html|png|jpe?g|webp|avif|gif|svg|ico|woff2?|ttf)$/i;
+  if ((publicRoot.test(pathname) || publicAsset.test(pathname) || pathname === "/data/measurement-fields.json") && !pathname.split('/').some(p => p.startsWith('.'))) {
+    return express.static(ROOT)(req, res, next);
+  }
+  next();
+});
+
 
 function ensureDataFiles() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -361,7 +371,25 @@ const adminApi = createAdminApi({
   ensureDataFiles
 });
 
+let initialization;
+function initialize() {
+  if (!initialization) initialization = (async () => {
+    ensureDataFiles();
+    if (USE_DB) {
+      await dbPool.query("SELECT 1");
+      await initDb();
+      dbAvailable = true;
+    }
+    await adminApi.initAdminTables();
+  })().catch(err => { dbAvailable = false; initialization = null; throw err; });
+  return initialization;
+}
+app.use('/api', async (req, res, next) => {
+  try { await initialize(); next(); }
+  catch { res.status(503).json({ success: false, message: 'The store database is temporarily unavailable. Please try again shortly.' }); }
+});
 adminApi.registerRoutes(app);
+require('./lib/customer-support').registerCustomerSupport(app, {dbPool, useDb, readJson, ORDERS_FILE, saveContact});
 
 app.post("/api/submit_order", async (req, res) => {
   try {
@@ -587,29 +615,7 @@ if (require.main === module) {
   });
 
   (async () => {
-    ensureDataFiles();
-
-    if (USE_DB) {
-      try {
-        await dbPool.query("SELECT 1");
-        dbAvailable = true;
-        await initDb();
-        await adminApi.initAdminTables();
-        console.log("PostgreSQL connected. Orders saved permanently.");
-      } catch (dbErr) {
-        dbAvailable = false;
-        console.error("Database connection failed, falling back to JSON storage:", dbErr.message);
-        await adminApi.initAdminTables();
-        console.log("Using local JSON storage (fallback).");
-      }
-    } else {
-      await adminApi.initAdminTables();
-      if (process.env.RENDER) {
-        console.log("WARNING: DATABASE_URL missing on Render. Orders will NOT persist!");
-      } else {
-        console.log("Using local JSON storage.");
-      }
-    }
+    await initialize();
 
     app.listen(PORT, "0.0.0.0", () => {
       const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;

@@ -63,6 +63,7 @@
       <li><button data-section="reports" onclick="showSection('reports')">📈 Reports</button></li>
       <li><button data-section="activity" onclick="showSection('activity')">📋 Activity Log</button></li>
       <li><button data-section="messages" onclick="showSection('messages')">✉️ Messages</button></li>
+      <li><button data-section="returns" onclick="showSection('returns')">↩️ Returns</button></li>
       <li><button data-section="tailoring" onclick="showSection('tailoring')">✂️ Tailoring</button></li>
     </ul>
   </aside>
@@ -186,6 +187,16 @@
       </div>
     </section>
 
+    <section id="section-returns" class="admin-section">
+      <div class="panel">
+        <div class="panel-header"><h2>Return Requests (<span id="returns-count">0</span>)</h2><button type="button" class="btn-sm btn-outline-sm" onclick="loadReturns()">Refresh</button></div>
+        <p class="sub">Fabric returns only, requested within 10 days of delivery. Stitched items are not eligible. Review the request and delivery date before replying to the customer.</p>
+        <label for="returns-search">Search return requests</label>
+        <input id="returns-search" type="search" placeholder="Order reference, request reference, name or email" oninput="renderReturns()" style="width:100%;margin:8px 0 18px;padding:12px;box-sizing:border-box">
+        <div id="returns-list" aria-live="polite"></div>
+      </div>
+    </section>
+
     <section id="section-categories" class="admin-section">
       <div class="panel">
         <div class="panel-header"><h2>Collections &amp; Stitching Categories</h2><button class="btn-sm btn-primary-sm" id="save-categories-btn" onclick="saveCatalogCategories()" disabled>Save Categories</button></div>
@@ -293,6 +304,6 @@
 <div id="loading-overlay" class="loading-overlay"><div class="spinner"></div></div>
 
 <script src="../js/catalog.js"></script>
-  <script src="admin.js"></script>
+  <script src="admin.js?v=returns-section-1"></script>
 </body>
 </html>

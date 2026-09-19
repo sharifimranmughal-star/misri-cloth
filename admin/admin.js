@@ -211,6 +211,7 @@ function showSection(name) {
     reports: "Reports",
     activity: "Activity Log",
     messages: "Messages",
+    returns: "Returns",
     categories: "Categories",
     tailoring: "Tailoring"
   };
@@ -228,6 +229,7 @@ function showSection(name) {
     reports: loadReports,
     activity: loadActivity,
     messages: loadMessages,
+    returns: loadReturns,
     categories: loadCategoriesSection,
     tailoring: loadTailoringSection
   };
@@ -1247,31 +1249,69 @@ function renderActivity(logs) {
     </table></div>`;
 }
 
-/* ── Messages (preserved from original) ── */
+/* ── Messages and return requests ── */
+// Classify existing records without changing their storage or losing history.
+function isReturnMessage(message) {
+  return ['returns & exchanges', 'returns'].includes(String(message.subject || '').trim().toLowerCase());
+}
+async function fetchSupportMessages() {
+  const res = await fetch(apiUrl("/api/messages"), {cache: 'no-store'});
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || 'Could not load customer requests.');
+  return Array.isArray(data.messages) ? data.messages : [];
+}
 async function loadMessages() {
   showLoading(true);
-  try {
-    const res = await fetch(apiUrl("/api/messages"));
-    const data = await res.json();
-    renderMessages(data.messages || []);
-  } catch (err) {
+  try { renderMessages(await fetchSupportMessages()); }
+  catch (err) {
+    $('#msg-count').textContent = '—';
+    $('#messages-list').innerHTML = '<p class="empty-state">Unable to load messages. Please reopen this section to retry.</p>';
     showToast(err.message, "error");
-  }
-  showLoading(false);
+  } finally { showLoading(false); }
 }
-
-function renderMessages(msgs) {
+function renderMessages(messages) {
+  const msgs = messages.filter(m => !isReturnMessage(m));
   $("#msg-count").textContent = msgs.length;
-  if (!msgs.length) {
-    $("#messages-list").innerHTML = `<p class="empty-state">No messages yet.</p>`;
-    return;
-  }
-  $("#messages-list").innerHTML = msgs.map((m) => `
+  $("#messages-list").innerHTML = msgs.length ? msgs.map((m) => `
     <div class="msg-box">
       <strong>${esc(m.first_name)} ${esc(m.last_name)}</strong>
       <div class="msg-meta">${esc(m.email)} · ${esc(m.subject)} · ${fmtDate(m.created_at)}</div>
-      <p>${esc(m.message)}</p>
-    </div>`).join("");
+      <p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(m.message)}</p>
+    </div>`).join("") : '<p class="empty-state">No messages yet.</p>';
+}
+let returnRequests = [];
+let returnsLoaded = false;
+let returnsLoadVersion = 0;
+async function loadReturns() {
+  const version = ++returnsLoadVersion;
+  returnsLoaded = false;
+  $('#returns-count').textContent = '…';
+  $('#returns-list').innerHTML = '<p class="empty-state">Loading return requests…</p>';
+  try {
+    const messages = await fetchSupportMessages();
+    if (version !== returnsLoadVersion) return;
+    returnRequests = messages.filter(isReturnMessage);
+    returnsLoaded = true;
+    renderReturns();
+  } catch (err) {
+    if (version !== returnsLoadVersion) return;
+    returnRequests = [];
+    $('#returns-count').textContent = '—';
+    $('#returns-list').innerHTML = '<p class="empty-state">Unable to load return requests. Click Refresh to try again.</p>';
+    showToast(err.message, 'error');
+  }
+}
+function renderReturns() {
+  if (!returnsLoaded) return;
+  const query = ($('#returns-search').value || '').trim().toLowerCase();
+  const requests = returnRequests.filter(m => [m.first_name,m.last_name,m.email,m.message].join(' ').toLowerCase().includes(query));
+  $('#returns-count').textContent = query ? `${requests.length} of ${returnRequests.length}` : returnRequests.length;
+  $('#returns-list').innerHTML = requests.length ? requests.map(m => `
+    <div class="msg-box">
+      <strong>${esc(m.first_name)} ${esc(m.last_name)}</strong>
+      <div class="msg-meta">${esc(m.email)} · ${fmtDate(m.created_at)}</div>
+      <p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(m.message)}</p>
+    </div>`).join('') : `<p class="empty-state">${query ? 'No return requests match your search.' : 'No return requests yet.'}</p>`;
 }
 
 /* ── Modal helpers ── */

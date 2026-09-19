@@ -4365,3 +4365,46 @@ h1, h2, h3, h4 {
 .stitching-extra input { width:18px; height:18px; flex-shrink:0; }
 .stitching-extra span { flex:1; min-width:0; overflow-wrap:anywhere; }
 .stitching-extra strong { white-space:nowrap; }
+
+/* Distinct My Order / Track Order links in desktop and mobile navigation only. */
+:root .nav-desktop a[href$="track-order.html"],
+:root .mobile-nav a[href$="track-order.html"]{
+ display:inline-flex;align-items:center;justify-content:center;gap:9px;
+ padding:11px 16px;min-height:44px;box-sizing:border-box;
+ background:linear-gradient(135deg,#ead7aa,#c6a263);color:#242719;
+ border:1px solid #bd995a;border-radius:8px;
+ font-family:var(--font-body,system-ui,sans-serif);font-size:12px;font-weight:600;
+ line-height:1.4;letter-spacing:.025em;text-transform:none;text-decoration:none;
+ box-shadow:0 4px 12px #28241114;
+ transition:background .2s,box-shadow .2s,border-color .2s;
+}
+/* Decorative parcel mark; no font or image download needed. */
+:root .nav-desktop a[href$="track-order.html"]::before,
+:root .mobile-nav a[href$="track-order.html"]::before{
+ content:"";position:static;display:block;flex:0 0 14px;width:14px;height:14px;
+ box-sizing:border-box;border:1.5px solid currentColor;border-radius:2px;
+ background:linear-gradient(currentColor,currentColor) center top/1.5px 6px no-repeat;
+ transform:none;opacity:1;
+}
+:root .nav-desktop a[href$="track-order.html"]::after,
+:root .mobile-nav a[href$="track-order.html"]::after{content:none;}
+:root .nav-desktop a[href$="track-order.html"]:hover,
+:root .mobile-nav a[href$="track-order.html"]:hover{
+ background:linear-gradient(135deg,#f3e3bf,#d9b579);color:#242719;
+ border-color:#a98445;box-shadow:0 6px 18px #28241124;transform:none;
+}
+:root .nav-desktop a[href$="track-order.html"].active,
+:root .mobile-nav a[href$="track-order.html"].active{
+ color:#242719;outline:2px solid var(--color-gold,#987844);outline-offset:3px;
+}
+:root .nav-desktop a[href$="track-order.html"]:focus-visible,
+:root .mobile-nav a[href$="track-order.html"]:focus-visible{
+ outline:3px solid var(--color-dark,#242719);outline-offset:4px;
+}
+:root .mobile-nav a[href$="track-order.html"]{width:100%;font-size:15px;padding:15px 14px;margin:8px 0;}
+@media(min-width:769px) and (max-width:1100px){
+ :root .nav-desktop a[href$="track-order.html"]{font-size:10px;padding:10px;gap:6px;white-space:normal;max-width:118px;text-align:center;}
+}
+@media(prefers-reduced-motion:reduce){
+ :root .nav-desktop a[href$="track-order.html"],:root .mobile-nav a[href$="track-order.html"]{transition:none;}
+}
