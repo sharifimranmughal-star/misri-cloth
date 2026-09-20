@@ -74,7 +74,7 @@ function toggleAdminTheme() {
   }
 }
 
-let adminPassword = sessionStorage.getItem("misri_admin_pw") || "";
+sessionStorage.removeItem("misri_admin_pw"); // Remove credentials retained by older versions.
 let adminName = sessionStorage.getItem("misri_admin_name") || "Admin";
 let currentSection = "dashboard";
 let orderFilter = "";
@@ -108,7 +108,6 @@ function showToast(msg, type = "") {
 
 function apiUrl(path, params = {}) {
   const url = new URL(path, window.location.origin);
-  url.searchParams.set("password", adminPassword);
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== "") url.searchParams.set(k, v);
   });
@@ -140,7 +139,7 @@ async function apiFetch(path, options = {}) {
 
 function esc(s) {
   if (s == null) return "";
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 function fmtDate(d) {
@@ -157,47 +156,33 @@ function statusBadge(status) {
 
 /* ── Auth ── */
 async function login() {
-  adminPassword = $("#password").value;
-  adminName = $("#admin-name")?.value?.trim() || "Admin";
+  adminName = $("#admin-name")?.value?.trim().slice(0, 120) || "Admin";
   showLoading(true);
   try {
-    const ok = await loadDashboard();
-    if (ok) {
-      sessionStorage.setItem("misri_admin_pw", adminPassword);
-      sessionStorage.setItem("misri_admin_name", adminName);
-      $("#login-view").style.display = "none";
-      $("#app").style.display = "flex";
-      document.body.classList.add("admin-app");
-      await fetch(apiUrl("/api/admin/login-log"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "Admin Login", adminName, password: adminPassword })
-      });
-      connectSSE();
-      showToast("Welcome back!", "success");
-    } else {
-      $("#login-error").style.display = "block";
-      $("#login-error").textContent = "Wrong password or server not running";
-    }
-  } catch {
-    $("#login-error").style.display = "block";
-    $("#login-error").textContent = "Could not connect to server";
-  }
-  showLoading(false);
+    const response = await fetch('/api/admin/login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:$('#password').value})});
+    $('#password').value = '';
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'Sign-in failed.');
+    sessionStorage.setItem('misri_admin_name', adminName);
+    if (!await loadDashboard()) throw new Error('Dashboard could not load. Please try again.');
+    $('#login-view').style.display = 'none';
+    $('#app').style.display = 'flex';
+    document.body.classList.add('admin-app');
+    connectSSE();
+    showToast('Welcome back!', 'success');
+  } catch (err) {
+    $('#login-error').style.display = 'block';
+    $('#login-error').textContent = err.message;
+  } finally { showLoading(false); }
 }
-
 async function logout() {
   try {
-    await fetch(apiUrl("/api/admin/login-log"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "Admin Logout", adminName, password: adminPassword })
-    });
-  } catch { /* ignore */ }
-  eventSource?.close();
-  sessionStorage.removeItem("misri_admin_pw");
-  sessionStorage.removeItem("misri_admin_name");
-  location.reload();
+    const response = await fetch('/api/admin/logout', {method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    if (!response.ok && response.status !== 401) throw new Error('Sign-out failed. Please try again.');
+    eventSource?.close();
+    sessionStorage.removeItem('misri_admin_name');
+    location.reload();
+  } catch (err) { showToast(err.message, 'error'); }
 }
 
 /* ── Navigation ── */
@@ -931,7 +916,7 @@ function renderOrdersTable(orders) {
       const colorInfo = i.color ? `<span class="item-color">Color: ${esc(i.color)}</span>` : '';
       const sizeInfo = i.size ? `<span class="item-size">Size: ${esc(i.size)}</span>` : '';
       const itemDetails = [colorInfo, sizeInfo].filter(Boolean).join(' · ');
-      const quantityInfo = i.meters ? `${i.meters}m × ${i.quantity || 1}` : `×${i.quantity}`;
+      const quantityInfo = i.meters ? `${esc(i.meters)}m × ${esc(i.quantity || 1)}` : `×${esc(i.quantity)}`;
       const tailoringInfo = i.tailoring_enabled && i.tailoring_type
         ? `<br><small class="item-tailoring">✂️ ${esc(TAILORING_LABELS[i.tailoring_type] || i.tailoring_type)}</small>`
         : "";
@@ -1032,7 +1017,7 @@ async function viewOrderDetails(orderId) {
     const itemsHTML = (order.items || []).map(item => {
       const colorBadge = item.color ? `<span class="color-badge">${esc(item.color)}</span>` : '';
       const sizeBadge = item.size ? `<span class="size-badge">${esc(item.size)}</span>` : '';
-      const quantityInfo = item.meters ? `${item.meters}m × ${item.quantity || 1}` : `×${item.quantity}`;
+      const quantityInfo = item.meters ? `${esc(item.meters)}m × ${esc(item.quantity || 1)}` : `×${esc(item.quantity)}`;
       const itemImage = item.image || 'https://via.placeholder.com/60?text=No+Image';
       const tailoringBadge = item.tailoring_enabled && item.tailoring_type
         ? `<span class="tailoring-badge">✂️ ${esc(TAILORING_LABELS[item.tailoring_type] || item.tailoring_type)} ${item.meters ? `(+${fmtMoney(item.tailoring_charge || 0)})` : "(included)"}</span>`
@@ -1530,18 +1515,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadOrders();
   });
 
-  if (adminPassword) {
-    $("#login-view").style.display = "none";
-    $("#app").style.display = "flex";
-    document.body.classList.add("admin-app");
-    loadDashboard().then((ok) => {
-      if (ok) connectSSE();
-      else {
-        sessionStorage.removeItem("misri_admin_pw");
-        location.reload();
-      }
-    });
-  }
+  try {
+    const session = await fetch('/api/admin/session', {cache:'no-store'});
+    if (session.ok && await loadDashboard()) {
+      $('#login-view').style.display = 'none';
+      $('#app').style.display = 'flex';
+      document.body.classList.add('admin-app');
+      connectSSE();
+    }
+  } catch { /* The login view remains available. */ }
+
 });
 
 

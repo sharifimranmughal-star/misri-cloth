@@ -17,7 +17,14 @@ const {
 const { validateGarmentOrderItem } = require("./lib/garment-orders");
 const { formatMeasurementsBlock } = require("./lib/measurement-fields");
 
+const { createSecurity, securityHeaders } = require("./lib/security");
+const { createCheckout } = require("./lib/secure-checkout");
 const app = express();
+app.disable("x-powered-by");
+const proxyHops = Number(process.env.TRUST_PROXY_HOPS ?? (process.env.RENDER ? 1 : 0));
+if (!Number.isInteger(proxyHops) || proxyHops < 0 || proxyHops > 5) throw new Error("Invalid TRUST_PROXY_HOPS");
+app.set("trust proxy", proxyHops);
+app.use(securityHeaders);
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const DATA_DIR = process.env.VERCEL
@@ -32,13 +39,13 @@ const NOTIFICATIONS_FILE = path.join(DATA_DIR, "notifications.json");
 const TAILORING_SETTINGS_FILE = path.join(DATA_DIR, "tailoring_charges.json");
 
 const OWNER_EMAIL = "sharifimranm@gmail.com";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "misri2026";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const DATABASE_URL = process.env.DATABASE_URL;
 const USE_DB = Boolean(DATABASE_URL);
 const dbPool = USE_DB
   ? new Pool({
-      connectionString: DATABASE_URL,
-      ssl: { rejectUnauthorized: false }
+      connectionString: (() => { const u = new URL(DATABASE_URL); for (const key of ["sslmode", "sslcert", "sslkey", "sslrootcert"]) u.searchParams.delete(key); return u.toString(); })(),
+      ssl: { rejectUnauthorized: true, ...(process.env.PG_CA_CERT ? { ca: process.env.PG_CA_CERT.replace(/\\n/g, "\n") } : {}) }
     })
   : null;
 
@@ -58,7 +65,9 @@ async function checkDbAvailable() {
   }
 }
 
-app.use(express.json({ limit: "5mb" }));
+const security = createSecurity({ password: ADMIN_PASSWORD, dbPool, production: Boolean(process.env.RENDER || process.env.VERCEL || process.env.NODE_ENV === "production") });
+app.use("/api", security.originGuard);
+app.use(express.json({ limit: "256kb", strict: true }));
 // Only public storefront assets may be served; data and server source stay private.
 app.use((req, res, next) => {
   let pathname;
@@ -99,7 +108,9 @@ function readJson(file) {
 
 function writeJson(file, data) {
   ensureDataFiles();
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  const temporary = file + ".tmp";
+  fs.writeFileSync(temporary, JSON.stringify(data, null, 2), { mode: 0o600 });
+  fs.renameSync(temporary, file);
 }
 
 async function initDb() {
@@ -142,6 +153,9 @@ async function initDb() {
     );
   `);
 
+  await dbPool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS request_key VARCHAR(80)');
+  await dbPool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS request_hash TEXT');
+  await dbPool.query('CREATE UNIQUE INDEX IF NOT EXISTS orders_request_key_unique ON orders(request_key)');
   await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tailoring_enabled BOOLEAN NOT NULL DEFAULT false;`);
   await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tailoring_type VARCHAR(50);`);
   await dbPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tailoring_charge NUMERIC(12,2) DEFAULT 0;`);
@@ -161,18 +175,19 @@ async function initDb() {
   `);
 }
 
-async function saveOrder(order) {
-  if (!useDb() || !(await checkDbAvailable())) {
+async function saveOrder(order, transaction) {
+  if (!USE_DB) {
     const orders = readJson(ORDERS_FILE);
     orders.unshift(order);
     writeJson(ORDERS_FILE, orders);
     return;
   }
 
-  const orderInsert = await dbPool.query(
+  if (!transaction) throw new Error("Order writes require a database transaction");
+  const orderInsert = await transaction.query(
     `INSERT INTO orders
-      (order_ref, customer_name, customer_phone, customer_email, customer_address, notes, total_amount, subtotal, delivery_charge, status, payment_method, payment_status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      (order_ref, customer_name, customer_phone, customer_email, customer_address, notes, total_amount, subtotal, delivery_charge, status, payment_method, payment_status, request_key, request_hash)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
      RETURNING id`,
     [
       order.order_ref,
@@ -186,13 +201,15 @@ async function saveOrder(order) {
       order.delivery_charge ?? 0,
       order.status,
       order.payment_method || "COD",
-      order.payment_status || "pending"
+      order.payment_status || "pending",
+      order.request_key || null,
+      order.request_hash || null
     ]
   );
   const orderId = orderInsert.rows[0].id;
 
   for (const item of order.items) {
-    await dbPool.query(
+    await transaction.query(
       `INSERT INTO order_items
        (order_id, product_id, product_name, size_label, color, meters, unit_price, quantity, line_total,
         tailoring_enabled, tailoring_type, tailoring_charge, tailoring_measurements, stitching_addons)
@@ -216,14 +233,14 @@ async function saveOrder(order) {
     );
   }
 
-  await dbPool.query(
+  await transaction.query(
     "INSERT INTO order_status_history (order_id, status, admin_name) VALUES ($1,$2,$3)",
     [orderId, order.status, "System"]
   );
 }
 
 async function saveContact(entry) {
-  if (!useDb() || !(await checkDbAvailable())) {
+  if (!USE_DB) {
     const messages = readJson(MESSAGES_FILE);
     messages.unshift(entry);
     writeJson(MESSAGES_FILE, messages);
@@ -238,7 +255,7 @@ async function saveContact(entry) {
 }
 
 async function getOrders() {
-  if (!useDb() || !(await checkDbAvailable())) return readJson(ORDERS_FILE);
+  if (!USE_DB) return readJson(ORDERS_FILE);
 
   const ordersResult = await dbPool.query(
     `SELECT id, order_ref, customer_name, customer_phone, customer_email, customer_address,
@@ -309,7 +326,7 @@ async function getOrders() {
 }
 
 async function getMessages() {
-  if (!useDb() || !(await checkDbAvailable())) return readJson(MESSAGES_FILE);
+  if (!USE_DB) return readJson(MESSAGES_FILE);
 
   const result = await dbPool.query(
     `SELECT id, first_name, last_name, email, subject, message, created_at
@@ -356,7 +373,7 @@ const adminApi = createAdminApi({
   DATA_DIR,
   useDb,
   dbPool,
-  ADMIN_PASSWORD,
+  security,
   readJson,
   writeJson,
   getOrders,
@@ -381,6 +398,7 @@ function initialize() {
       dbAvailable = true;
     }
     await adminApi.initAdminTables();
+    await security.init();
   })().catch(err => { dbAvailable = false; initialization = null; throw err; });
   return initialization;
 }
@@ -388,79 +406,20 @@ app.use('/api', async (req, res, next) => {
   try { await initialize(); next(); }
   catch { res.status(503).json({ success: false, message: 'The store database is temporarily unavailable. Please try again shortly.' }); }
 });
+security.register(app);
+app.use("/api/submit_order", security.rateLimit("checkout", 20));
+app.use("/api/send_contact", security.rateLimit("contact", 10));
+app.use(["/api/track_order", "/api/request_return"], security.rateLimit("support", 30));
+app.use("/api/admin/upload", security.rateLimit("upload", 20));
 adminApi.registerRoutes(app);
+const checkout = createCheckout({dbPool, api: adminApi, saveOrder, readJson, writeJson, PRODUCTS_FILE, ORDERS_FILE});
 require('./lib/customer-support').registerCustomerSupport(app, {dbPool, useDb, readJson, ORDERS_FILE, saveContact});
 
 app.post("/api/submit_order", async (req, res) => {
   try {
-    const { name, phone, email, address, notes, items, total, payment_method } = req.body || {};
-
-    if (!name || !phone || !address) {
-      return res.status(400).json({ success: false, message: "Name, phone and address are required" });
-    }
-    if (!items || !items.length) {
-      return res.status(400).json({ success: false, message: "Cart is empty" });
-    }
-
-    const [availableAddons, currentCharges] = await Promise.all([adminApi.getStitchingAddons(), adminApi.getTailoringCharges()]);
-    for (const item of items) {
-      const product = normalizeProductStock(await adminApi.getProductById(item.product_id, false));
-      if (!product) {
-        return res.status(400).json({ success: false, message: `${item.product_name} is no longer available` });
-      }
-      const stitchingValidation = validateGarmentOrderItem(product, item);
-      if (!stitchingValidation.valid) {
-        return res.status(400).json({ success: false, message: stitchingValidation.message });
-      }
-      const addonValidation = validateAddonOrderItem(product, item, availableAddons, currentCharges);
-      if (!addonValidation.valid) return res.status(400).json({ success: false, message: addonValidation.message });
-      const needed = getItemStockQty(item);
-      const availableStock = getColorStock(product, item.color);
-
-      if (availableStock < needed) {
-        const colorLabel = item.color ? ` (${item.color})` : "";
-        return res.status(400).json({
-          success: false,
-          message: `${product.name}${colorLabel} is out of stock or insufficient quantity available. Available: ${availableStock}, Requested: ${needed}`
-        });
-      }
-    }
-
-    if (items.some(item => item.stitching_addons?.length)) {
-      const subtotal = items.reduce((sum, item) => sum + Number(item.line_total), 0);
-      if (!Number.isFinite(Number(total)) || Math.abs(Number(total) - calcOrderTotal(subtotal)) > 0.01) {
-        return res.status(400).json({ success: false, message: 'Order total does not match your stitching options. Please refresh your cart' });
-      }
-    }
-    const orderRef = generateOrderRef();
-    const order = {
-      id: Date.now(),
-      order_ref: orderRef,
-      customer_name: name,
-      customer_phone: phone,
-      customer_email: email || "",
-      customer_address: address,
-      notes: notes || "",
-      total_amount: total,
-      status: "pending",
-      payment_method: payment_method || "COD",
-      payment_status: "pending",
-      items,
-      statusHistory: [{ status: "pending", changedAt: new Date().toISOString(), adminName: "System" }],
-      created_at: new Date().toISOString()
-    };
-
-    await saveOrder(order);
-
-    // Non-critical operations - don't fail order if these fail
-    try {
-      for (const item of items) {
-        const qty = getItemStockQty(item);
-        await adminApi.adjustStock(item.product_id, -qty, "System", "Order placed — stock reduced", item.color);
-      }
-    } catch (stockErr) {
-      console.error("Stock adjustment failed:", stockErr.message);
-    }
+    const order = await checkout(req.body);
+    if (order.duplicate) return res.json({success:true,order_ref:order.order_ref,message:"Order already placed successfully"});
+    const { customer_name: name, customer_phone: phone, customer_email: email, customer_address: address, notes, items, total_amount: total, order_ref: orderRef } = order;
 
     try {
       await adminApi.logActivity("Order Received", `New order ${orderRef} from ${name}`, "System");
@@ -515,8 +474,9 @@ app.post("/api/submit_order", async (req, res) => {
 
     res.json({ success: true, order_ref: orderRef, message: "Order placed successfully" });
   } catch (err) {
-    console.error("submit_order failed:", err.message);
-    console.error("Full error:", err);
+    if (err.status === 400) return res.status(400).json({ success: false, message: err.message });
+    console.error("submit_order failed:", err.code || "request failed");
+
     res.status(500).json({
       success: false,
       message: "Order could not be saved. Please try again or contact us directly."
@@ -524,8 +484,15 @@ app.post("/api/submit_order", async (req, res) => {
   }
 });
 
-app.post("/api/send_contact", async (req, res) => {
+app.post("/api/send_contact", async (req, res, next) => {
+  try {
   const { firstName, lastName, email, subject, message } = req.body || {};
+  const limits = {firstName:60,lastName:60,email:120,subject:120,message:4000};
+  for (const [key, max] of Object.entries(limits)) {
+    const value = req.body?.[key];
+    if ((key !== 'subject' || value != null) && (typeof value !== 'string' || !value.trim() || value.length > max)) return res.status(400).json({success:false,message:'Please enter valid contact details.'});
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({success:false,message:'Invalid email.'});
   const fullName = `${firstName || ""} ${lastName || ""}`.trim();
 
   if (!firstName || !lastName || !email || !message) {
@@ -558,6 +525,7 @@ app.post("/api/send_contact", async (req, res) => {
   await notifyOwner(`Contact: ${subjectText} — ${fullName}`, emailBody, email);
 
   res.json({ success: true, message: "Message sent! We will reply to your email soon." });
+  } catch (err) { next(err); }
 });
 
 app.get("/api/health", async (req, res) => {
@@ -584,7 +552,7 @@ app.get("/api/health", async (req, res) => {
 });
 
 app.get("/api/orders", async (req, res) => {
-  if (req.query.password !== ADMIN_PASSWORD) {
+  if (!req.adminAuthenticated) {
     return res.status(401).json({ success: false, message: "Unauthorized" });
   }
   try {
@@ -597,7 +565,7 @@ app.get("/api/orders", async (req, res) => {
 });
 
 app.get("/api/messages", async (req, res) => {
-  if (req.query.password !== ADMIN_PASSWORD) {
+  if (!req.adminAuthenticated) {
     return res.status(401).json({ success: false, message: "Unauthorized" });
   }
   try {
@@ -607,6 +575,12 @@ app.get("/api/messages", async (req, res) => {
     console.error("messages read failed:", err.message);
     res.status(500).json({ success: false, message: "Could not load messages" });
   }
+});
+
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  const status = err.type === 'entity.too.large' || err.code === 'LIMIT_FILE_SIZE' ? 413 : (err.status === 400 || err instanceof SyntaxError || String(err.code || '').startsWith('LIMIT_') ? 400 : 500);
+  res.status(status).json({success:false,message:status === 413 ? 'Request is too large.' : status === 400 ? 'Invalid request.' : 'The request could not be completed. Please try again.'});
 });
 
 if (require.main === module) {

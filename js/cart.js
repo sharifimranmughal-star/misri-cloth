@@ -175,7 +175,7 @@ function updateCartQty(key, qty) {
   if (product) {
     const available = getColorStock(product, item.color);
     if (qty > available) {
-      showToast(`Only ${available} available for ${item.color}`);
+      showToast(`Only ${available} available for ${escapeCatalogText(item.color)}`);
       return;
     }
   }
@@ -291,31 +291,31 @@ function renderCartDrawer() {
       ? formatMeasurementsSummary(item.tailoringType, item.tailoringMeasurements)
       : "";
     const tailoringLine = item.tailoringEnabled && item.tailoringType
-      ? `<br><small class="cart-tailoring-note"><i class="fas fa-cut"></i> Custom ${getTailoringLabel(item.tailoringType)} stitching ${item.isFabric ? `(+${formatPrice(item.tailoringCharge || 0)})` : "(included)"}</small>${measureSummary ? `<br><small class="cart-measurements-note"><i class="fas fa-ruler"></i> ${measureSummary}</small>` : ""}`
+      ? `<br><small class="cart-tailoring-note"><i class="fas fa-cut"></i> Custom ${escapeCatalogText(getTailoringLabel(item.tailoringType))} stitching ${item.isFabric ? `(+${formatPrice(item.tailoringCharge || 0)})` : "(included)"}</small>${measureSummary ? `<br><small class="cart-measurements-note"><i class="fas fa-ruler"></i> ${measureSummary}</small>` : ""}`
       : "";
     const extrasLine = item.stitchingAddons?.length ? `<br><small class="cart-extras-note">Extras: ${item.stitchingAddons.map(a => `${escapeCatalogText(a.name)} (+${formatPrice(a.price)})`).join(', ')} per garment</small>` : '';
     const detailLine = item.isFabric
-      ? `${item.color} · ${formatPrice(item.unitPrice)} each${tailoringLine}${extrasLine}`
-      : `${item.size} · ${item.color}${tailoringLine}${extrasLine}`;
+      ? `${escapeCatalogText(item.color)} · ${formatPrice(item.unitPrice)} each${tailoringLine}${extrasLine}`
+      : `${escapeCatalogText(item.size)} · ${escapeCatalogText(item.color)}${tailoringLine}${extrasLine}`;
 
     const qtyControls = `<div class="qty-control">
-          <button class="qty-btn" data-action="decrease" data-key="${item.key}" aria-label="Decrease quantity">−</button>
-          <span>${item.qty}</span>
-          <button class="qty-btn" data-action="increase" data-key="${item.key}" aria-label="Increase quantity">+</button>
+          <button class="qty-btn" data-action="decrease" data-key="${escapeCatalogText(item.key)}" aria-label="Decrease quantity">−</button>
+          <span>${escapeCatalogText(item.qty)}</span>
+          <button class="qty-btn" data-action="increase" data-key="${escapeCatalogText(item.key)}" aria-label="Increase quantity">+</button>
         </div>`;
 
     return `
-      <div class="cart-item" data-key="${item.key}">
-        <img src="${item.image}" alt="${item.name}">
+      <div class="cart-item" data-key="${escapeCatalogText(item.key)}">
+        <img src="${escapeCatalogText(item.image)}" alt="${escapeCatalogText(item.name)}">
         <div class="cart-item-details">
-          <h4>${item.name}</h4>
+          <h4>${escapeCatalogText(item.name)}</h4>
           <p>${detailLine}</p>
           <div class="cart-item-bottom">
             ${qtyControls}
             <span class="cart-item-price">${formatPrice(lineTotal)}</span>
           </div>
         </div>
-        <button class="cart-remove" data-key="${item.key}" aria-label="Remove item">
+        <button class="cart-remove" data-key="${escapeCatalogText(item.key)}" aria-label="Remove item">
           <i class="fas fa-times"></i>
         </button>
       </div>
@@ -521,6 +521,12 @@ async function submitOrder(e) {
   };
 
   btn.disabled = true;
+  const requestSignature = JSON.stringify(payload);
+  if (form._checkoutSignature !== requestSignature) {
+    form._checkoutSignature = requestSignature;
+    form._checkoutKey = crypto.randomUUID();
+  }
+  payload.request_key = form._checkoutKey;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Placing Order...';
 
   try {
