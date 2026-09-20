@@ -100,34 +100,21 @@ function highlightActiveNav() {
   });
 }
 
-// Category banners are configured beside the category inputs on each catalog page.
-// Collections prefer an available product photo; local fabric banners remain the fallback.
+// Always use the category banner configured in Admin → Categories.
+// Product photos belong to product cards and must not override this banner.
 function updateCatalogHero(category) {
   const hero = document.querySelector('#shop-hero');
   if (!hero) return;
   const inputs = Array.from(document.querySelectorAll('input[name="category"]'));
   const input = inputs.find(input => input.value === category) || inputs.find(input => input.value === 'all');
   if (!input?.dataset.heroImage) return;
-  const fallback = input.dataset.heroImage;
+  const source = input.dataset.heroImage;
   const position = input.dataset.heroPosition || 'center';
-  const product = document.body.dataset.catalogSection === 'collections' && category !== 'all'
-    ? getProductsByCategory(category).find(product => product.image || product.images?.[0]) : null;
-  const source = product?.image || product?.images?.[0] || fallback;
-  const key = JSON.stringify([category, source, fallback, position]);
+  const key = JSON.stringify([category, source, position]);
   if (hero.dataset.heroRequest === key) return;
   hero.dataset.heroRequest = key;
-  hero.style.backgroundImage = `url(${JSON.stringify(fallback)})`;
+  hero.style.backgroundImage = `url(${JSON.stringify(source)})`;
   hero.style.backgroundPosition = position;
-  if (source === fallback) return;
-  const image = new Image();
-  image.onload = () => {
-    // Ignore a delayed image if the visitor has already selected another category.
-    if (hero.dataset.heroRequest !== key) return;
-    hero.style.backgroundImage = `url(${JSON.stringify(source)})`;
-    hero.style.backgroundPosition = 'center';
-  };
-  image.onerror = () => {}; // The local fallback is already visible.
-  image.src = source;
 }
 
 async function initShopPage() {
