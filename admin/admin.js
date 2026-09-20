@@ -457,7 +457,8 @@ function productCategoryTableHTML(products) {
           <button onclick="editProduct(${p.id})">Edit</button>
           <button onclick="toggleProductVisibility(${p.id}, ${p.isVisible})">${p.isVisible ? "Hide" : "Show"}</button>
           <button onclick="duplicateProduct(${p.id})">Duplicate</button>
-          <button onclick="deleteProduct(${p.id})">Delete</button>
+          <button onclick="archiveProduct(${p.id})" ${p.status === 'inactive' && !p.isVisible ? 'disabled' : ''}>Archive</button>
+          <button onclick="deleteProduct(${p.id})" title="Remove this product permanently">Permanently Delete</button>
         </div>
       </td>
     </tr>`;
@@ -848,19 +849,32 @@ async function duplicateProduct(id) {
   showLoading(false);
 }
 
+async function archiveProduct(id) {
+  if (!confirm("Archive this product? It will be hidden from the store and kept in admin. You can restore it through Edit by setting Active and Visible.")) return;
+  await removeProduct(id, false);
+}
 async function deleteProduct(id) {
-  if (!confirm("Delete this product? It will be archived and hidden from the store.")) return;
+  const confirmation = prompt(`Permanently delete product #${id}? This cannot be undone. Existing order records will remain.\n\nType DELETE ${id} to confirm:`);
+  if (confirmation === null) return;
+  if (confirmation.trim() !== `DELETE ${id}`) {
+    showToast("Confirmation did not match. Nothing was deleted.", "error");
+    return;
+  }
+  await removeProduct(id, true, confirmation.trim());
+}
+async function removeProduct(id, permanent, confirmation) {
   showLoading(true);
   try {
-    const res = await fetch(apiUrl(`/api/admin/products/${id}`), { method: "DELETE" });
+    const res = await fetch(apiUrl(`/api/admin/products/${id}`, {permanent: String(permanent), adminName}), {
+      method: "DELETE", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(permanent ? {confirmation} : {})
+    });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.message || "Delete failed");
-    showToast("Product deleted", "success");
-    loadProducts();
-  } catch (err) {
-    showToast(err.message, "error");
-  }
-  showLoading(false);
+    if (!res.ok || !data.success) throw new Error(data.message || "Could not update product");
+    showToast(data.action === "deleted" ? "Product permanently deleted" : "Product archived", "success");
+    await loadProducts();
+  } catch (err) { showToast(err.message, "error"); }
+  finally { showLoading(false); }
 }
 
 /* ── Orders ── */
